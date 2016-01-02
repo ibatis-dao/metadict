@@ -1165,6 +1165,39 @@ COMMENT ON TABLE sec_authentication_kind IS 'схемы, виды аутенти
 
 
 --
+-- Name: sec_authentication_kind_add(integer, sec_authentication_kind); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_authentication_kind_add(p_session_id integer, p_row sec_authentication_kind) RETURNS sec_authentication_kind
+    LANGUAGE plpgsql COST 5
+    AS $$declare
+  -- добавление схемы аутентификации. возвращает добавленную строку.
+  res  sec_authentication_kind;
+begin
+  -- проверка полномочий на выполнение операции
+  perform sec_session_require_permission(p_session_id, 'sec_authentication_kind.add');
+  -- регистрируем событие
+  perform sec_event_start(p_session_id, 'sec_authentication_kind', 'add', xmlforest(p_row));
+  -- добавляем строку
+  p_row.id := coalesce(p_row.id, nextval('sec_authentication_kind_id_seq'::regclass));
+  insert into sec_authentication_kind 
+  values (p_row.*)
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_authentication_kind_add(p_session_id integer, p_row sec_authentication_kind) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_authentication_kind_add(p_session_id integer, p_row sec_authentication_kind); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_authentication_kind_add(p_session_id integer, p_row sec_authentication_kind) IS 'добавление схемы аутентификации. возвращает добавленную строку.';
+
+
+--
 -- Name: sec_authentication_kind_by_code(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1234,6 +1267,72 @@ ALTER FUNCTION public.sec_authentication_kind_by_name(p_name text) OWNER TO post
 --
 
 COMMENT ON FUNCTION sec_authentication_kind_by_name(p_name text) IS 'поиск схемы аутентификации по её имени. возвращает строку, если такая найдена. если не найдена или найдено несколько с таким именем, возбуждает исключение';
+
+
+--
+-- Name: sec_authentication_kind_del(integer, sec_authentication_kind); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_authentication_kind_del(p_session_id integer, p_row sec_authentication_kind) RETURNS sec_authentication_kind
+    LANGUAGE plpgsql COST 5
+    AS $$declare
+  -- удаление схемы аутентификации. возвращает удаленную строку.
+  res  sec_authentication_kind;
+begin
+  -- проверка полномочий на выполнение операции
+  perform sec_session_require_permission(p_session_id, 'sec_authentication_kind.del');
+  -- регистрируем событие
+  perform sec_event_start(p_session_id, 'sec_authentication_kind', 'del', xmlforest(p_row));
+  -- удаляем строку
+  delete from sec_authentication_kind 
+   where id = p_row.id
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_authentication_kind_del(p_session_id integer, p_row sec_authentication_kind) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_authentication_kind_del(p_session_id integer, p_row sec_authentication_kind); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_authentication_kind_del(p_session_id integer, p_row sec_authentication_kind) IS 'удаление схемы аутентификации. возвращает удаленную строку.';
+
+
+--
+-- Name: sec_authentication_kind_upd(integer, sec_authentication_kind); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_authentication_kind_upd(p_session_id integer, p_row sec_authentication_kind) RETURNS sec_authentication_kind
+    LANGUAGE plpgsql COST 5
+    AS $$declare
+  -- обновление схемы аутентификации. возвращает обновленную строку.
+  res  sec_authentication_kind;
+begin
+  -- проверка полномочий на выполнение операции
+  perform sec_session_require_permission(p_session_id, 'sec_authentication_kind.upd');
+  -- регистрируем событие
+  perform sec_event_start(p_session_id, 'sec_authentication_kind', 'upd', xmlforest(p_row));
+  -- обновляем строку
+  update sec_authentication_kind 
+     set name = p_row.name,
+         code = p_row.code
+   where id = p_row.id
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_authentication_kind_upd(p_session_id integer, p_row sec_authentication_kind) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_authentication_kind_upd(p_session_id integer, p_row sec_authentication_kind); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_authentication_kind_upd(p_session_id integer, p_row sec_authentication_kind) IS 'обновление схемы аутентификации. возвращает обновленную строку.';
 
 
 --
@@ -1316,7 +1415,8 @@ CREATE TABLE sec_event (
     whenfired timestamp with time zone NOT NULL,
     event_kind integer NOT NULL,
     event_status integer NOT NULL,
-    session_id integer NOT NULL
+    session_id integer NOT NULL,
+    context xml
 );
 
 
@@ -1351,10 +1451,17 @@ COMMENT ON COLUMN sec_event.session_id IS 'идентификатор сесси
 
 
 --
--- Name: sec_event_start(integer, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: COLUMN sec_event.context; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text) RETURNS sec_event
+COMMENT ON COLUMN sec_event.context IS 'контекст (аттрибуты, параметры) события';
+
+
+--
+-- Name: sec_event_start(integer, text, text, xml); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml DEFAULT NULL::xml) RETURNS sec_event
     LANGUAGE plpgsql COST 3
     AS $$
 declare
@@ -1362,8 +1469,8 @@ declare
   res  sec_event;
 begin
 --  BEGIN SUBTRANSACTION;
-  insert into sec_event (session_id, whenfired, event_kind, event_status)
-  values (p_session_id, clock_timestamp(), (env_event_kind(p_class_name, p_event_name)).id, (env_event_status())."STARTED")
+  insert into sec_event (session_id, whenfired, event_kind, event_status, context)
+  values (p_session_id, clock_timestamp(), (env_event_kind(p_class_name, p_event_name)).id, (env_event_status())."STARTED", p_context)
   returning * into res;
 --  COMMIT SUBTRANSACTION;
   return res;
@@ -1371,13 +1478,13 @@ end;
 $$;
 
 
-ALTER FUNCTION public.sec_event_start(p_session_id integer, p_class_name text, p_event_name text) OWNER TO postgres;
+ALTER FUNCTION public.sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text) IS 'регистрирует начало события с указанным именем и именем класса';
+COMMENT ON FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml) IS 'регистрирует начало события с указанным именем и именем класса';
 
 
 --
@@ -1725,6 +1832,33 @@ ALTER FUNCTION public.sec_session_has_role(p_session_id integer, p_role_name tex
 --
 
 COMMENT ON FUNCTION sec_session_has_role(p_session_id integer, p_role_name text) IS 'возвращает наличие указанной роли в указанной сессии';
+
+
+--
+-- Name: sec_session_require_permission(integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_session_require_permission(p_session_id integer, p_permission_name text) RETURNS void
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- проверяет наличие указанного разрешения в указанной сессии. если разрешение отсутствует, генерирует исключение
+begin
+  -- текущая сессия
+  if (not sec_session_has_permission(p_session_id, p_permission_name)) then
+    -- 'SEC00004', 'access denied. has no permission (%s)'
+    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', p_permission_name);
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_session_require_permission(p_session_id integer, p_permission_name text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_session_require_permission(p_session_id integer, p_permission_name text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_session_require_permission(p_session_id integer, p_permission_name text) IS 'проверяет наличие указанного разрешения в указанной сессии. если разрешение отсутствует, генерирует исключение';
 
 
 --
@@ -2621,7 +2755,12 @@ begin
   -- проверяем валидность созданной сессии
   l_root_session := sec_session_valid(l_root_token.session_id);
   -- схемы, виды аутентификации
-  l_ak := sec_authentication_kind_by_code(c_auth_kind);
+  begin
+    l_ak := sec_authentication_kind_by_code(c_auth_kind);
+  exception
+    when NO_DATA_FOUND then 
+      l_ak := sec_authentication_kind_add(l_root_token.session_id, row(null, c_auth_kind, c_auth_kind));
+  end;
   -- методы, способы и источники проверки аутентификации
   select * into l_ap
     from sec_authentication_path
@@ -3692,6 +3831,7 @@ COPY env_application_relation (id, related_to_id) FROM stdin;
 
 COPY env_class (id, name) FROM stdin;
 1	sec_session
+2	sec_authentication_kind
 \.
 
 
@@ -3699,7 +3839,7 @@ COPY env_class (id, name) FROM stdin;
 -- Name: env_class_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_class_id_seq', 1, true);
+SELECT pg_catalog.setval('env_class_id_seq', 2, true);
 
 
 --
@@ -3711,6 +3851,9 @@ COPY env_event_kind (id, name, class_id) FROM stdin;
 2	login_failed	1
 4	logout_succeded	1
 5	logout_failed	1
+6	add	2
+7	upd	2
+8	del	2
 \.
 
 
@@ -3718,7 +3861,7 @@ COPY env_event_kind (id, name, class_id) FROM stdin;
 -- Name: env_event_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_event_kind_id_seq', 5, true);
+SELECT pg_catalog.setval('env_event_kind_id_seq', 8, true);
 
 
 --
@@ -3800,6 +3943,8 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 55	1
 56	1
 57	1
+58	1
+59	1
 \.
 
 
@@ -3807,7 +3952,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 57, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 59, true);
 
 
 --
@@ -3888,6 +4033,8 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 55	authentication credential not unique for user id "%1$s" and authentication path id "%2$s"	SEC00030	45
 56	authentication kind not found by name "%s"	SEC00031	45
 57	authentication kind not unique by name "%s"	SEC00032	45
+58	authentication kind not found by code "%s"	SEC00033	45
+59	authentication kind not unique by code "%s"	SEC00034	45
 \.
 
 
@@ -5294,6 +5441,7 @@ COPY prs_person_legal (person_id, name_short, name_long) FROM stdin;
 COPY sec_authentication_kind (id, name, code) FROM stdin;
 2	ldap	ldap
 1	pg_crypt	pg_crypt
+3	yandex.passport	yandex.passport
 \.
 
 
@@ -5301,7 +5449,7 @@ COPY sec_authentication_kind (id, name, code) FROM stdin;
 -- Name: sec_authentication_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_authentication_kind_id_seq', 2, false);
+SELECT pg_catalog.setval('sec_authentication_kind_id_seq', 3, true);
 
 
 --
@@ -5324,13 +5472,15 @@ SELECT pg_catalog.setval('sec_authentication_path_id_seq', 2, true);
 -- Data for Name: sec_event; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_event (whenfired, event_kind, event_status, session_id) FROM stdin;
-2015-12-15 00:11:09.36655+03	1	1	1
-2015-12-15 00:22:28.786236+03	1	1	1
-2016-01-02 01:24:55.282399+03	1	1	13
-2016-01-02 01:25:49.405492+03	1	1	14
-2016-01-02 01:57:27.32688+03	1	1	21
-2016-01-02 01:57:27.331835+03	4	1	21
+COPY sec_event (whenfired, event_kind, event_status, session_id, context) FROM stdin;
+2015-12-15 00:11:09.36655+03	1	1	1	\N
+2015-12-15 00:22:28.786236+03	1	1	1	\N
+2016-01-02 01:24:55.282399+03	1	1	13	\N
+2016-01-02 01:25:49.405492+03	1	1	14	\N
+2016-01-02 01:57:27.32688+03	1	1	21	\N
+2016-01-02 01:57:27.331835+03	4	1	21	\N
+2016-01-03 01:25:07.938859+03	1	1	28	\N
+2016-01-03 01:25:07.940722+03	6	1	28	\N
 \.
 
 
@@ -5348,6 +5498,7 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 1	2016-01-02 01:24:55.281193+03	\N	13
 1	2016-01-02 01:25:49.402142+03	\N	14
 1	2016-01-02 01:57:27.326147+03	2016-01-02 01:57:27.331323+03	21
+1	2016-01-03 01:25:07.938238+03	\N	28
 \.
 
 
@@ -5355,7 +5506,7 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 -- Name: sec_session_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_session_id_seq', 21, true);
+SELECT pg_catalog.setval('sec_session_id_seq', 28, true);
 
 
 --
@@ -5366,6 +5517,7 @@ COPY sec_token (id, textvalue, credential, auth_path_id, session_id, validfrom, 
 7	85d135d1-1368-7737-f668-997aedd00c4c	\N	1	13	2016-01-02 01:24:55.281817+03	\N
 8	6a54e86b-4510-9df6-c6a7-1cef1a94cbcd	\N	1	14	2016-01-02 01:25:49.403274+03	\N
 15	a1ef75db-9e64-e9b7-8145-19c226ed9f4b	\N	1	21	2016-01-02 01:57:27.326467+03	2016-01-02 01:57:27.330516+03
+22	56780b26-c475-d68a-c922-710ff64e9f32	\N	1	28	2016-01-03 01:25:07.938485+03	\N
 \.
 
 
@@ -5373,7 +5525,7 @@ COPY sec_token (id, textvalue, credential, auth_path_id, session_id, validfrom, 
 -- Name: sec_token_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_token_id_seq', 15, true);
+SELECT pg_catalog.setval('sec_token_id_seq', 22, true);
 
 
 --
