@@ -831,28 +831,166 @@ COMMENT ON FUNCTION sec_event_start(p_session_id uuid, p_class_name text, p_even
 
 
 --
--- Name: uuid_generate(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sec_token; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
-CREATE FUNCTION uuid_generate() RETURNS uuid
-    LANGUAGE plpgsql COST 5
+CREATE TABLE sec_token (
+    id integer NOT NULL,
+    textvalue text NOT NULL,
+    credential text,
+    auth_path_id integer,
+    session_id integer NOT NULL,
+    validfrom timestamp with time zone NOT NULL,
+    validtill timestamp with time zone
+);
+
+
+ALTER TABLE public.sec_token OWNER TO postgres;
+
+--
+-- Name: TABLE sec_token; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_token IS 'токены безопасности, полученные от соответствующих источников аутентификации';
+
+
+--
+-- Name: COLUMN sec_token.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.id IS 'идентификатор токена';
+
+
+--
+-- Name: COLUMN sec_token.textvalue; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.textvalue IS 'значение токена';
+
+
+--
+-- Name: COLUMN sec_token.credential; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.credential IS 'Учетные данные, использованные при аутентификации';
+
+
+--
+-- Name: COLUMN sec_token.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: COLUMN sec_token.session_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.session_id IS 'идентификатор сессии';
+
+
+--
+-- Name: COLUMN sec_token.validfrom; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.validfrom IS 'момент (включительно) начала действия токена';
+
+
+--
+-- Name: COLUMN sec_token.validtill; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.validtill IS 'момент (включительно) окончания действия токена';
+
+
+--
+-- Name: sec_login(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer DEFAULT NULL::integer) RETURNS sec_token
+    LANGUAGE plpgsql COST 10
     AS $$declare
-  l_result uuid;
+  -- аутентификация. возвращает токен безопасности, если аутентификация выполнена успешно. в противном случае возвращает NULL
+  l_uac      sec_user_authcred;
+  l_session  sec_session;
+  l_token    sec_token;
 begin
-  -- random UUID generation 
-  select md5(random()::text || clock_timestamp()::text)::uuid into l_result;
-  return l_result;
+  -- проверка указанных учетных данных
+  select * into l_uac from sec_user_authcred_accepted(p_user_name, p_credential, p_auth_path_id) limit 1;
+  if (found) then
+    -- учетные данные приняты, создаем сессию
+    insert into sec_session (id, user_id, whenstarted)
+    values (default, l_uac.user_id, clock_timestamp())
+    returning * into l_session;
+    insert into sec_token(id, textvalue, credential, auth_path_id, session_id, validfrom, validtill)
+    values (default, uuid_generate(), l_uac.credential, l_uac.auth_path_id, l_session.id, clock_timestamp(), null)
+    returning * into l_token;
+    -- регистрируем событие логина
+    select sec_event_start(l_session.id, 'sec_session', 'login_succeded');
+    -- возвращаем строку токена
+    return l_token;
+  else 
+    -- учетные данные не приняты
+    -- регистрируем событие неудачной попытки логина
+    select sec_event_start(nextval('sec_session_id_seq'::regclass), 'sec_session', 'login_failed');
+    -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
+    raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
+    return null;
+  end if;
 end;
 $$;
 
 
-ALTER FUNCTION public.uuid_generate() OWNER TO postgres;
+ALTER FUNCTION public.sec_login(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
 
 --
--- Name: FUNCTION uuid_generate(); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION uuid_generate() IS 'random UUID generation';
+COMMENT ON FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer) IS 'аутентификация. возвращает идентификатор сессии, если аутентификация выполнена успешно. в противном случае возвращает NULL';
+
+
+--
+-- Name: sec_logout(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_logout(p_tokenvalue text) RETURNS sec_token
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- завершает сессию с указанным токеном. возвращает строку токена, если сессия завершена успешно. в противном случае возвращает null
+  l_token    sec_token; -- токен
+begin
+  -- проверка действительности токена
+  select * into l_token from sec_token_valid(p_tokenvalue);
+  if (found) then
+    -- токен действителен, завершаем его
+    update sec_token
+       set validtill = clock_timestamp()
+     where id = l_token.id
+    returning * into l_token;
+    update sec_session 
+       set whenended = clock_timestamp()
+     where id = l_token.session_id;
+    -- регистрируем событие логаута
+    select sec_event_start(l_token.session_id, 'sec_session', 'logout_succeded');
+    -- возвращаем строку сессии
+    return l_token;
+  else 
+    -- 'SEC00026', 'token "%s" not found'
+    raise warning invalid_password using message = env_resource_text_format('SEC00026', p_tokenvalue);
+    return null;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_logout(p_tokenvalue text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_logout(p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_logout(p_tokenvalue text) IS 'завершает сессию с указанным токеном. возвращает строку токена, если сессия завершена успешно. в противном случае возвращает null';
 
 
 --
@@ -862,10 +1000,8 @@ COMMENT ON FUNCTION uuid_generate() IS 'random UUID generation';
 CREATE TABLE sec_session (
     user_id integer NOT NULL,
     whenstarted timestamp with time zone NOT NULL,
-    id uuid DEFAULT uuid_generate() NOT NULL,
     whenended timestamp with time zone,
-    credential character varying(511),
-    auth_path_id integer NOT NULL
+    id integer NOT NULL
 );
 
 
@@ -893,13 +1029,6 @@ COMMENT ON COLUMN sec_session.whenstarted IS 'дата/время начала �
 
 
 --
--- Name: COLUMN sec_session.id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_session.id IS 'идентификатор сессии';
-
-
---
 -- Name: COLUMN sec_session.whenended; Type: COMMENT; Schema: public; Owner: postgres
 --
 
@@ -907,103 +1036,10 @@ COMMENT ON COLUMN sec_session.whenended IS 'дата/время завершен
 
 
 --
--- Name: COLUMN sec_session.credential; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN sec_session.id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN sec_session.credential IS 'Учетные данные, использованные при аутентификации';
-
-
---
--- Name: COLUMN sec_session.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_session.auth_path_id IS 'источник аутентификации';
-
-
---
--- Name: sec_login(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer DEFAULT NULL::integer) RETURNS sec_session
-    LANGUAGE plpgsql COST 10
-    AS $$declare
-  -- аутентификация. возвращает идентификатор сессии, если аутентификация выполнена успешно. в противном случае возвращает NULL
-  l_uac      sec_user_authcred;
-  l_session  sec_session%rowtype;
-begin
-  -- проверка указанных учетных данных
-  select * into l_uac from sec_user_authcred_accepted(p_user_name, p_credential, p_auth_path_id) limit 1;
-  if (found) then
-    -- учетные данные приняты, создаем сессию
-    insert into sec_session (id, user_id, whenstarted, credential, auth_path_id)
-    values (uuid_generate(), l_uac.user_id, clock_timestamp(), l_uac.credential, l_uac.auth_path_id)
-    returning * into l_session;
-    -- регистрируем событие логина
-    select sec_event_start(l_session.id, 'sec_session', 'login_succeded');
-    -- возвращаем строку сессии
-    return l_session;
-  else 
-    -- учетные данные не приняты
-    -- регистрируем событие неудачной попытки логина
-    select sec_event_start(uuid_generate(), 'sec_session', 'login_failed');
-    -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
-    raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
-    return null;
-  end if;
-end;
-$$;
-
-
-ALTER FUNCTION public.sec_login(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
-
---
--- Name: FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer) IS 'аутентификация. возвращает идентификатор сессии, если аутентификация выполнена успешно. в противном случае возвращает NULL';
-
-
---
--- Name: sec_logout(uuid); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION sec_logout(p_session_id uuid) RETURNS sec_session
-    LANGUAGE plpgsql COST 10
-    AS $$declare
-  -- завершает указанную сессию. возвращает строку сессии, если сессия завершена успешно. в противном случае возвращает null
-  l_session  sec_session%rowtype;
-begin
-  -- проверка действительности сессии
-  select * into l_session from sec_session_valid(p_session_id);
-  if (found) then
-    -- сессия действительна, завершаем её
-    update sec_session 
-       set whenended = clock_timestamp()
-     where id = p_session_id
-    returning * into l_session;
-    -- регистрируем событие логаута
-    select sec_event_start(p_session_id, 'sec_session', 'logout_succeded');
-    -- возвращаем строку сессии
-    return l_session;
-  else 
-    -- сессия не действительна
-    -- регистрируем событие неудачной попытки логаута
-    select sec_event_start(p_session_id, 'sec_session', 'logout_failed');
-    -- 'SEC00008', 'logout failed. session id (%s) not found'
-    raise warning invalid_password using message = env_resource_text_format('SEC00008', p_session_id);
-    return null;
-  end if;
-end;
-$$;
-
-
-ALTER FUNCTION public.sec_logout(p_session_id uuid) OWNER TO postgres;
-
---
--- Name: FUNCTION sec_logout(p_session_id uuid); Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON FUNCTION sec_logout(p_session_id uuid) IS 'завершает указанную сессию. возвращает строку сессии, если сессия завершена успешно. в противном случае возвращает null';
+COMMENT ON COLUMN sec_session.id IS 'идентификатор сессии';
 
 
 --
@@ -1131,6 +1167,79 @@ ALTER FUNCTION public.sec_session_valid(p_session_id uuid) OWNER TO postgres;
 --
 
 COMMENT ON FUNCTION sec_session_valid(p_session_id uuid) IS 'проверки валидности сессии';
+
+
+--
+-- Name: sec_token_find_by_value(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_token_find_by_value(p_tokenvalue text) RETURNS sec_token
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  -- поиск токена по его текстовому содержимому. возвращает строку токена, если такой найден.
+  -- если токен не найден, возбуждает исключение
+  res  sec_token;
+begin
+  select st.* 
+    into strict res
+    from sec_token st 
+   where st.textvalue = p_tokenvalue;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    raise exception 'p_tokenvalue % not found', p_tokenvalue;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_token_find_by_value(p_tokenvalue text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_token_find_by_value(p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_token_find_by_value(p_tokenvalue text) IS 'поиск токена по его текстовому содержимому. возвращает строку токена, если такой найден. если токен не найден, возбуждает исключение';
+
+
+--
+-- Name: sec_token_valid(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_token_valid(p_tokenvalue text) RETURNS sec_token
+    LANGUAGE plpgsql STABLE COST 10
+    AS $$
+declare
+  -- проверки валидности токена безопасности
+  l_token  sec_token; -- токен
+  now      timestamp with time zone;
+begin
+  -- ищем токен по его значению
+  select * into l_token from sec_token_find_by_value(p_tokenvalue);
+  if (found) then
+    -- токен найден
+    now := clock_timestamp();
+    if (l_token.validfrom > now) or (coalesce(l_token.validtill, now) < now) then
+      -- период действия токена ещё не наступил или уже окончен
+      -- 'SEC00025', 'token "%s" expired'
+      raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00025', p_tokenvalue);
+    end if;
+    return l_token;
+  else
+    -- токен не найден
+    -- 'SEC00026', 'token "%s" not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00026', p_tokenvalue);
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_token_valid(p_tokenvalue text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_token_valid(p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_token_valid(p_tokenvalue text) IS 'проверки валидности токена безопасности';
 
 
 --
@@ -1823,6 +1932,31 @@ ALTER FUNCTION public.test_sec() OWNER TO postgres;
 --
 
 COMMENT ON FUNCTION test_sec() IS 'модульные тесты проверки операций над учетными записями и учетными данными';
+
+
+--
+-- Name: uuid_generate(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION uuid_generate() RETURNS uuid
+    LANGUAGE plpgsql COST 5
+    AS $$declare
+  l_result uuid;
+begin
+  -- random UUID generation 
+  select md5(random()::text || clock_timestamp()::text)::uuid into l_result;
+  return l_result;
+end;
+$$;
+
+
+ALTER FUNCTION public.uuid_generate() OWNER TO postgres;
+
+--
+-- Name: FUNCTION uuid_generate(); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION uuid_generate() IS 'random UUID generation';
 
 
 SET default_with_oids = false;
@@ -2646,6 +2780,48 @@ ALTER SEQUENCE sec_authentication_path_id_seq OWNED BY sec_authentication_path.i
 
 
 --
+-- Name: sec_session_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE sec_session_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sec_session_id_seq OWNER TO postgres;
+
+--
+-- Name: sec_session_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE sec_session_id_seq OWNED BY sec_session.id;
+
+
+--
+-- Name: sec_token_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE sec_token_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sec_token_id_seq OWNER TO postgres;
+
+--
+-- Name: sec_token_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE sec_token_id_seq OWNED BY sec_token.id;
+
+
+--
 -- Name: sec_user_authcred_log; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -2856,6 +3032,20 @@ ALTER TABLE ONLY sec_authentication_path ALTER COLUMN id SET DEFAULT nextval('se
 -- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
+ALTER TABLE ONLY sec_session ALTER COLUMN id SET DEFAULT nextval('sec_session_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_token ALTER COLUMN id SET DEFAULT nextval('sec_token_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
 ALTER TABLE ONLY sec_user ALTER COLUMN id SET DEFAULT nextval('sec_user_id_seq'::regclass);
 
 
@@ -2983,6 +3173,8 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 33	1
 34	1
 35	1
+36	1
+37	1
 \.
 
 
@@ -2990,7 +3182,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 35, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 37, true);
 
 
 --
@@ -3049,6 +3241,8 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 33	credential must contain at least one punctuation character	SEC00020	45
 34	credential must not be similar to previous one	SEC00022	45
 35	credential must not be changed "%1$s" after previos changes at "%2$s"	SEC00023	45
+36	token "%s" expired	SEC00025	45
+37	token "%s" not found	SEC00026	45
 \.
 
 
@@ -4493,14 +4687,36 @@ COPY sec_event (whenfired, event_kind, event_status, session_id) FROM stdin;
 -- Data for Name: sec_session; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_session (user_id, whenstarted, id, whenended, credential, auth_path_id) FROM stdin;
-1	2015-12-03 00:00:00+03	0d64f5e2-c558-b11f-9efd-a10c77d60de1	\N	---	1
-1	2015-12-03 23:29:42.324451+03	5daa1715-5028-18d7-c663-c49d11595913	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
-1	2015-12-03 23:23:01.995911+03	69fe54b6-bdd1-a72f-42d3-503a8a68584a	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
-1	2015-12-03 23:19:51.317474+03	b642c69e-9419-8661-f897-c0602dcdd5b9	\N	\N	1
-1	2015-12-03 23:47:48.062573+03	6b976b0d-f216-3515-18ec-cd5ae32b5596	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
-1	2015-12-14 23:07:15.094859+03	12de987a-656b-1fa3-1de4-f866079478c4	\N	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1
+COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
+1	2015-12-03 00:00:00+03	\N	1
+1	2015-12-03 23:29:42.324451+03	\N	2
+1	2015-12-03 23:23:01.995911+03	\N	3
+1	2015-12-03 23:19:51.317474+03	\N	4
+1	2015-12-03 23:47:48.062573+03	\N	5
+1	2015-12-14 23:07:15.094859+03	\N	6
 \.
+
+
+--
+-- Name: sec_session_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('sec_session_id_seq', 6, true);
+
+
+--
+-- Data for Name: sec_token; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_token (id, textvalue, credential, auth_path_id, session_id, validfrom, validtill) FROM stdin;
+\.
+
+
+--
+-- Name: sec_token_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('sec_token_id_seq', 1, false);
 
 
 --
@@ -4760,6 +4976,14 @@ ALTER TABLE ONLY sec_session
 
 
 --
+-- Name: pk_sec_token; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_token
+    ADD CONSTRAINT pk_sec_token PRIMARY KEY (id);
+
+
+--
 -- Name: pk_sec_user; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -4853,6 +5077,14 @@ ALTER TABLE ONLY i18_language
 
 ALTER TABLE ONLY i18_language
     ADD CONSTRAINT uk_i18_language02 UNIQUE (alpha3code);
+
+
+--
+-- Name: uk_sec_token02; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_token
+    ADD CONSTRAINT uk_sec_token02 UNIQUE (id, textvalue);
 
 
 --
@@ -5008,11 +5240,19 @@ ALTER TABLE ONLY sec_session
 
 
 --
--- Name: fk_sec_session02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: fk_sec_token01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY sec_session
-    ADD CONSTRAINT fk_sec_session02 FOREIGN KEY (auth_path_id) REFERENCES sec_authentication_path(id);
+ALTER TABLE ONLY sec_token
+    ADD CONSTRAINT fk_sec_token01 FOREIGN KEY (auth_path_id) REFERENCES sec_authentication_path(id);
+
+
+--
+-- Name: fk_sec_token02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_token
+    ADD CONSTRAINT fk_sec_token02 FOREIGN KEY (session_id) REFERENCES sec_session(id);
 
 
 --
