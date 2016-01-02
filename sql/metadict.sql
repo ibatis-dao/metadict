@@ -538,30 +538,46 @@ COMMENT ON FUNCTION env_severity_level(OUT "DEBUG" smallint, OUT "LOG" smallint,
 -- Name: env_text_similar(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION env_text_similar(word1 text, word2 text, min_len integer DEFAULT 5) RETURNS boolean
+CREATE FUNCTION env_text_similar(word1 text, word2 text, min_sim_len integer DEFAULT 5) RETURNS integer
     LANGUAGE plpgsql IMMUTABLE COST 2
-    AS $$declare
-  -- сравнивает две строки (word1, word2) на сходство. возвращает true, если две строки схожи и false - в противном случае.
+    AS $_$declare
+  -- сравнивает две строки (word1, word2) на сходство (без учета регистра символов). возвращает true, если две строки схожи и false - в противном случае.
   -- строки считаются схожими, если у них есть общие части текста (последовательность символов не менее min_len символов)
 begin
   if (word1 is not null) and (word2 is not null) then
--- TODO: доделать
-    for i in 1 .. char_length(word1) loop
-      null;
+    -- сравниваем без учета регистра символов
+    word1 := lower(word1);
+    word2 := lower(word2);
+    -- ищем вхождение фрагментов строки word1 в строке word2
+    for i in 1 .. char_length(word1)-min_sim_len loop
+      -- если вхождение найдено
+      if position(substring(word1 from i for min_sim_len) in word2) > 0 then
+        -- 'RES00003', 'text "%1$s" is similar to "%2$s"'
+        return env_resource_text_find_by_code('RES00003');
+      end if;
+    end loop;
+    -- ищем вхождение фрагментов строки word2 в строке word1
+    for i in 1 .. char_length(word2)-min_sim_len loop
+      -- если вхождение найдено
+      if position(substring(word2 from i for min_sim_len) in word1) > 0 then
+        -- 'RES00003', 'text "%1$s" is similar to "%2$s"'
+        return env_resource_text_find_by_code('RES00003');
+      end if;
     end loop;
   end if;
-  return false;
+  -- 'RES00004', 'text "%1$s" is not similar to "%2$s"'
+  return env_resource_text_find_by_code('RES00004');
 end;
-$$;
+$_$;
 
 
-ALTER FUNCTION public.env_text_similar(word1 text, word2 text, min_len integer) OWNER TO postgres;
+ALTER FUNCTION public.env_text_similar(word1 text, word2 text, min_sim_len integer) OWNER TO postgres;
 
 --
--- Name: FUNCTION env_text_similar(word1 text, word2 text, min_len integer); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION env_text_similar(word1 text, word2 text, min_sim_len integer); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION env_text_similar(word1 text, word2 text, min_len integer) IS 'сравнивает две строки (word1, word2) на сходство. возвращает true, если две строки схожи и false - в противном случае.
+COMMENT ON FUNCTION env_text_similar(word1 text, word2 text, min_sim_len integer) IS 'сравнивает две строки (word1, word2) на сходство (без учета регистра символов). возвращает true, если две строки схожи и false - в противном случае.
 строки считаются схожими, если у них есть общие части текста (последовательность символов не менее min_len символов)';
 
 
@@ -1286,7 +1302,7 @@ COMMENT ON FUNCTION sec_user_authcred_by_user_id(p_user_id integer, p_auth_path_
 
 CREATE FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) RETURNS integer
     LANGUAGE plpgsql STABLE COST 30
-    AS $$declare
+    AS $_$declare
   -- проверка соответствия политике учетных данных.
   -- p_session_id - текущая сессия, p_user_id - учетная запись, для которой проверяются учетные данные на сответствие политике
   -- p_old_credential "старые" (текущие) учетные данные, p_credential - "новые" учетные данные, p_auth_path_id - способ аутентификации
@@ -1294,11 +1310,18 @@ CREATE FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id int
   l_uac      sec_user_authcred;
   ok         boolean;
   l_user     sec_user;
-  c          char(1);
+  moment     timestamp with time zone;
   res        integer;
   l_similarity  constant integer := 5; -- требуемая точность сходства
   l_min_length  constant integer := 8; -- минимальная длина учетных данных
   l_authcred_log_depth constant integer := 100; -- глубина просмотра журнала истории учетных данных
+  l_digit    constant text := '[0-9]'; -- регулярное выражение для поиска цифр
+  l_alpha_ci constant text := '[a-zа-яA-ZА-Я]'; -- регулярное выражение для поиска букв без учета регистра символов
+  l_alpha_lc constant text := '[a-zа-я]'; -- регулярное выражение для поиска букв в нижнем регистре
+  l_alpha_uc constant text := '[A-ZА-Я]'; -- регулярное выражение для поиска букв в верхнем регистре
+  l_punctuation constant text := '[^a-zA-Zа-яА-Я0-9]'; -- регулярное выражение для поиска знаков препинания и спецсимволов
+  l_min_cred_age constant interval := '1 day'; -- сколько дней нельзя менять учетные данные (минимальный срок жизни учетных данных)
+  l_max_cred_age constant interval := '100 day'; -- сколько дней нельзя использовать такие-же учетные данные (максимальный срок жизни учетных данных)
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
@@ -1309,37 +1332,67 @@ begin
     select * into l_uac from sec_user_authcred_accepted(p_user_id, p_old_credential, p_auth_path_id) limit 1;
     if (found) then -- "старые" (текущие) учетные данные действительны
       l_user := sec_user_by_id(p_user_id);
-      -- минимальная длина 
+      -- минимальная длина 'SEC00015', 'credential length (%1$s) less than minimum allowed (%2$s)'
       if (p_credential is null) or (char_length(p_credential) < l_min_length) then
-        return env_resource_text_find_by_code('-----');
+        return env_resource_text_find_by_code('SEC00015', char_length(p_credential)::text, l_min_length::text);
       end if;
-      -- TODO: сложность (большие, маленькие буквы, цифры, знаки)
-      for i in 1 .. char_length(p_credential) loop
-        c := substring(p_credential from i for 1);
-        if position(c in '0123456789') = 0 then -- не содержит цифр
-          return env_resource_text_find_by_code('-----');
-        end if;
-        if regexp_matches(c, '[a-z,A-Z,а-я,А-Я]') is null then -- не содержит букв
-          return env_resource_text_find_by_code('-----');
-        end if;
-      end loop;
-      
-      -- если старые и новые учетные данные похожи сточностью до 5 общих символов подряд
-      if env_text_similar(p_old_credential, p_credential, l_similarity) then 
-        return env_resource_text_find_by_code('-----');
+      -- сложность (большие, маленькие буквы, цифры, знаки)
+      if regexp_matches(p_credential, l_alpha) is null then -- не содержит цифр
+        -- 'SEC00016', 'credential must contain at least one digit'
+        return env_resource_text_find_by_code('SEC00016');
+      end if;
+      if regexp_matches(p_credential, l_alpha_ci) is null then -- не содержит букв
+        -- 'SEC00017', 'credential must contain at least one letter'
+        return env_resource_text_find_by_code('SEC00017');
+      end if;
+      if regexp_matches(p_credential, l_alpha_lc) is null then -- не содержит букв в нижнем регистре
+        -- 'SEC00018', 'credential must contain at least one lower case letter'
+        return env_resource_text_find_by_code('SEC00018');
+      end if;
+      if regexp_matches(p_credential, l_alpha_uc) is null then -- не содержит букв в верхнем регистре
+        -- 'SEC00019', 'credential must contain at least one upper case letter'
+        return env_resource_text_find_by_code('SEC00019');
+      end if;
+      if regexp_matches(p_credential, l_punctuation) is null then -- не содержит знаков препинания и спецсимволов
+        -- 'SEC00020', 'credential must contain at least one punctuation character'
+        return env_resource_text_find_by_code('SEC00020');
       end if;
       -- если имя учетной записи и новые учетные данные похожи сточностью до 5 общих символов подряд
       if env_text_similar(l_user.name, p_credential, l_similarity) then 
-        return env_resource_text_find_by_code('-----');
+        -- 'SEC00021', 'credential must not be similar to user name'
+        return env_resource_text_find_by_code('SEC00021');
+      end if;
+      -- если старые и новые учетные данные похожи сточностью до 5 общих символов подряд
+      if env_text_similar(p_old_credential, p_credential, l_similarity) then 
+        -- 'SEC00022', 'credential must not be similar to previous one'
+        return env_resource_text_find_by_code('SEC00022');
+      end if;
+      -- менялись ли учетные данные в течении послених N дней
+      -- для исключения быстрой смены N паролей и возвращения к ранее использованным учетным данным
+      select cl.when_logged
+        into moment
+        from sec_user_authcred_log cl
+       where cl.user_id = p_user_id 
+         and cl.auth_path_id = l_uac.auth_path_id
+         and cl.credential_hash <> sec_user_authcred_hash(p_session_id, p_credential, l_uac.auth_path_id)
+         and cl.when_logged > clock_timestamp() - l_min_cred_age -- сколько дней нельзя менять учетные данные
+       order by cl.when_logged desc
+       limit 1;
+      if (found) then -- учетные данные менялись в течении послених N дней
+        -- 'SEC00023', 'credential must not be changed "%1$s" after previos changes at "%2$s"'
+        return env_resource_text_find_by_code('SEC00023', l_min_cred_age, moment);
       end if;
       -- поиск совпадений новых учетных данных со старыми во всей истории из 
       -- журнала изменений учетных данных или с ограничением глубины анализа истории
+      -- TODO: переделать. надо считать кол-во смен паролей, а не кол-во строк
       select 1 
         from sec_user_authcred_log cl
        where cl.user_id = p_user_id 
          and cl.auth_path_id = l_uac.auth_path_id
          and cl.credential_hash = sec_user_authcred_hash(p_session_id, p_credential, l_uac.auth_path_id)
-         and row_number() over (order by cl.when_logged desc) < l_authcred_log_depth; -- глубина просмотра журнала истории
+         and cl.when_logged > clock_timestamp() - l_max_cred_age -- сколько дней нельзя использовать такие-же учетные данные
+       order by cl.when_logged
+       limit l_authcred_log_depth; -- глубина просмотра журнала истории
       if (found) then -- совпадения найдены
         return env_resource_text_find_by_code('-----');
       end if;
@@ -1359,7 +1412,7 @@ begin
   end if;
   return res;
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION public.sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
@@ -2920,6 +2973,16 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 23	1
 24	1
 25	1
+26	1
+27	1
+28	1
+29	1
+30	1
+31	1
+32	1
+33	1
+34	1
+35	1
 \.
 
 
@@ -2927,7 +2990,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 25, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 35, true);
 
 
 --
@@ -2970,12 +3033,22 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 20	no valid credentials found for user (%s) and authentication path id (%s)	SEC00009	45
 21	authentication path id is not defined or user (%s) has more than one different authentication paths	SEC00010	45
 5	ok (no errors)	ANY00001	45
-22	authentication path id (%s) found	SEC00011	45
 23	authentication path id (%s) not unique	SEC00012	45
 16	wrong or unknown username (%s) or credential/authentication path	SEC00007	45
 19	session id (%s) not found	SEC00008	45
 24	user id %s not found	SEC00013	45
 25	user id %s not unique	SEC00014	45
+26	text "%1$s" looks similar to "%2$s"	RES00003	45
+27	text "%1$s" is not similar to "%2$s"	RES00004	45
+22	authentication path id (%s) not found	SEC00011	45
+28	credential length (%1$s) less than minimum allowed (%2$s)	SEC00015	45
+29	credential must contain at least one digit	SEC00016	45
+30	credential must contain at least one letter	SEC00017	45
+31	credential must contain at least one lower case letter	SEC00018	45
+32	credential must contain at least one upper case letter	SEC00019	45
+33	credential must contain at least one punctuation character	SEC00020	45
+34	credential must not be similar to previous one	SEC00022	45
+35	credential must not be changed "%1$s" after previos changes at "%2$s"	SEC00023	45
 \.
 
 
