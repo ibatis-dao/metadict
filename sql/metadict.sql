@@ -640,6 +640,78 @@ end;$$;
 ALTER FUNCTION public.mdd_class_upd("pCLASSID" bigint, "pBASECLASSID" bigint, "pNAME" character varying) OWNER TO postgres;
 
 --
+-- Name: sec_authentication_path; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_authentication_path (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    authentication_kind_id integer NOT NULL,
+    credential_kind character varying(50),
+    application_id integer,
+    credential_hash_kind text
+);
+
+
+ALTER TABLE public.sec_authentication_path OWNER TO postgres;
+
+--
+-- Name: TABLE sec_authentication_path; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_authentication_path IS 'методы, способы и источники проверки аутентификации';
+
+
+--
+-- Name: COLUMN sec_authentication_path.application_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_authentication_path.application_id IS 'id приложения';
+
+
+--
+-- Name: COLUMN sec_authentication_path.credential_hash_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_authentication_path.credential_hash_kind IS 'Вид хеша учетных данных';
+
+
+--
+-- Name: sec_authentication_path_by_id(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_authentication_path_by_id(p_auth_path_id integer) RETURNS sec_authentication_path
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  -- возвращает строку по идентификатору
+  l_ap       sec_authentication_path;
+begin
+  select *
+    into strict l_ap
+    from sec_authentication_path ap
+   where id = p_auth_path_id;
+  return l_ap;
+exception
+  when NO_DATA_FOUND then
+    -- 'SEC00011', 'authentication path id (%s) found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00011', p_auth_path_id::text);
+  when TOO_MANY_ROWS then
+    -- 'SEC00012', 'authentication path id (%s) not unique'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00012', p_auth_path_id::text);
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_authentication_path_by_id(p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_authentication_path_by_id(p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_authentication_path_by_id(p_auth_path_id integer) IS 'возвращает строку по идентификатору';
+
+
+--
 -- Name: sec_event; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -1023,7 +1095,8 @@ CREATE TABLE sec_user_authcred (
     auth_path_id integer NOT NULL,
     credential character varying(511),
     valid_from timestamp with time zone NOT NULL,
-    valid_till timestamp with time zone NOT NULL
+    valid_till timestamp with time zone NOT NULL,
+    credential_hash text
 );
 
 
@@ -1069,6 +1142,13 @@ COMMENT ON COLUMN sec_user_authcred.valid_from IS 'момент начала д�
 --
 
 COMMENT ON COLUMN sec_user_authcred.valid_till IS 'момент окончания действия (включительно)';
+
+
+--
+-- Name: COLUMN sec_user_authcred.credential_hash; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred.credential_hash IS 'Хеш учетных данных';
 
 
 --
@@ -1134,6 +1214,42 @@ COMMENT ON FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential te
 
 
 --
+-- Name: sec_user_authcred_by_user_id(integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_by_user_id(p_user_id integer, p_auth_path_id integer) RETURNS boolean
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  -- поиск учетных данных для указанной учетной записи (p_user_id) и источника аутентификации (p_auth_path_id)
+  l_uac      sec_user_authcred;
+begin
+  select *
+    into strict l_uac
+    from sec_user_authcred
+   where user_id = l_user.id
+     and (clock_timestamp() between valid_from and valid_till); --срок действия учетных данных
+  return l_uac;
+exception
+  when NO_DATA_FOUND then
+    -- 'SEC00009', 'no valid credentials found for user (%s) and authentication path id (%s)'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00009', p_user_name, p_auth_path_id::text);
+  when TOO_MANY_ROWS then
+    -- 'SEC00010', 'authentication path id is not defined or user (%s) has more than one different authentication paths'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00010', p_user_name);
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_by_user_id(p_user_id integer, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_by_user_id(p_user_id integer, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_by_user_id(p_user_id integer, p_auth_path_id integer) IS 'поиск учетных данных для указанной учетной записи (p_user_id) и источника аутентификации (p_auth_path_id)';
+
+
+--
 -- Name: sec_user_authcred_comply_policy(uuid, integer, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1155,9 +1271,10 @@ begin
     select * into l_uac from sec_user_authcred_accepted(p_user_id, p_old_credential, p_auth_path_id) limit 1;
     if (found) then -- учетные данные действительны
       -- проверка отличия новых учетных данных от старых
-      /*
       if (p_old_credential = p_credential) then
+        return env_resource_text_find_by_code('-----');
       end if;
+      /*
       update sec_user_authcred acr
          set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
        where user_id = l_session.user_id
@@ -1187,10 +1304,10 @@ COMMENT ON FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id
 
 
 --
--- Name: sec_user_authcred_prepare(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sec_user_authcred_encrypt(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) RETURNS text
+CREATE FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer) RETURNS text
     LANGUAGE plpgsql COST 10
     AS $_$declare
   -- возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью
@@ -1219,13 +1336,51 @@ end;
 $_$;
 
 
-ALTER FUNCTION public.sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+ALTER FUNCTION public.sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) IS 'возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью';
+COMMENT ON FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer) IS 'возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью';
+
+
+--
+-- Name: sec_user_authcred_hash(uuid, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_hash(p_session_id uuid, p_credential text, p_auth_path_id integer) RETURNS text
+    LANGUAGE plpgsql COST 30
+    AS $$declare
+  -- возвращает хеш учетных данных
+  l_session  sec_session; -- текущая сессия
+  l_uac      sec_user_authcred;
+  l_user     sec_user;
+  l_ap       sec_authentication_path;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_valid(p_session_id);
+  -- проверка текущих учетных данных
+  select * into l_uac from sec_user_authcred_accepted(l_session.user_id, p_credential, p_auth_path_id) limit 1;
+  if (found) then
+    l_user := sec_user_by_id(l_session.user_id);
+    l_ap := sec_authentication_path_by_id(p_auth_path_id);
+    return encode(digest(l_user.name||p_credential, l_ap.credential_hash_kind), 'hex');
+  else
+    -- "SEC00007", "wrong or unknown username (%s) or credential/authentication path"
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00007', p_user_name);
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_hash(p_session_id uuid, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_hash(p_session_id uuid, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_hash(p_session_id uuid, p_credential text, p_auth_path_id integer) IS 'возвращает хеш учетных данных';
 
 
 --
@@ -1250,10 +1405,14 @@ begin
     select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset') into ok;
     -- TODO: проверка соответствия политике учетных данных
     -- sec_user_authcred_comply_policy(p_session_id, l_session.user_id, p_old_credential, p_credential, p_auth_path_id);
-    if (ok) then
-      -- полномочий достаточно, меняем учетные данные
+    if (ok) then -- полномочий достаточно
+      -- сохраняем текщие учетные данные в журнал изменений
+      insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
+      values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
+      -- меняем учетные данные
       update sec_user_authcred acr
-         set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
+         set credential = sec_user_authcred_encrypt(user_id, p_credential, auth_path_id),
+             credential_hash = sec_user_authcred_hash(l_session, p_credential, p_auth_path_id)
        where user_id = l_session.user_id
          and auth_path_id = p_auth_path_id;
       -- если учетные данные изменены
@@ -1282,9 +1441,10 @@ CREATE FUNCTION sec_user_authcred_reset_any(p_session_id uuid, p_user_name text,
     LANGUAGE plpgsql COST 30
     AS $$declare
   -- смена учетных данных (p_credential) для указанной учетной записи (p_user_name)
-  l_session sec_session; -- текущая сессия
-  l_user sec_user; -- учетная запись, для которого меняются учетные данные
-  ok boolean;
+  l_session  sec_session; -- текущая сессия
+  l_user     sec_user; -- учетная запись, для которого меняются учетные данные
+  ok         boolean;
+  l_uac      sec_user_authcred;
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
@@ -1292,29 +1452,18 @@ begin
   select * into l_user from sec_user_find_by_name(p_user_name);
   --наличие полномочий на смену чужих учетных данных или попытка сменить свои
   select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset_any') or (l_session.user_id = l_user.id) into ok;
-  if (ok) then
-    if (p_auth_path_id is null) then
-      begin
-        select auth_path_id
-          into strict p_auth_path_id
-          from sec_user_authcred
-         where user_id = l_user.id
-           and (clock_timestamp() between valid_from and valid_till); --срок действия учетных данных
-      exception
-        when NO_DATA_FOUND then
-          -- 'SEC00009', 'no valid credentials found for user (%s) and authentication path id (%s)'
-          raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00009', p_user_name, p_auth_path_id::text);
-        when TOO_MANY_ROWS then
-          -- 'SEC00010', 'authentication path id is not defined or user (%s) has more than one different authentication paths'
-          raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00010', p_user_name);
-      end;
-    end if;
+  if (ok) then -- полномочий достаточно
+    l_uac := sec_user_authcred_by_user_id(l_user.id, p_auth_path_id);
+    -- сохраняем текщие учетные данные в журнал изменений
+    insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
+    values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
     -- TODO: написать проверку политики учетных данных и вызвать её здесь
-    -- полномочий достаточно, меняем учетные данные
+    -- меняем учетные данные
     update sec_user_authcred
-       set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
+       set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id),
+           credential_hash = sec_user_authcred_hash(l_session, p_credential, p_auth_path_id)
      where user_id = l_user.id
-       and auth_path_id = p_auth_path_id;
+       and auth_path_id = l_uac.auth_path_id;
     -- если учетные данные изменены
     ok := found;
   else
@@ -1354,6 +1503,80 @@ ALTER TABLE public.sec_user OWNER TO postgres;
 --
 
 COMMENT ON TABLE sec_user IS 'пользователи';
+
+
+--
+-- Name: sec_user_by_id(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_by_id(p_id integer) RETURNS sec_user
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  -- поиск учетной записи по её идентификатору. возвращает строку учетной записи, если такая найдена.
+  -- если учетная запись не найдена или найдено несколько учетных записей с таким идентификатором, возбуждает исключение
+  res  sec_user;
+begin
+  select u.*
+    into STRICT res
+    from sec_user u
+   where id = p_id;
+   return res;
+exception
+  when NO_DATA_FOUND then
+    -- 'SEC00013', 'user id %s not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00013', p_id::text);
+  when TOO_MANY_ROWS then
+    -- 'SEC00014', 'user id %s not unique'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00014', p_id::text);
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_by_id(p_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_by_id(p_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_by_id(p_id integer) IS 'поиск учетной записи по её идентификатору. возвращает строку учетной записи, если такая найдена. если учетная запись не найдена или найдено несколько учетных записей с таким идентификатором, возбуждает исключение';
+
+
+--
+-- Name: sec_user_by_name(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_by_name(p_user_name text) RETURNS sec_user
+    LANGUAGE plpgsql STABLE COST 10
+    AS $_$declare
+  -- поиск учетной записи по её имени. возвращает строку учетной записи, если такая найдена.
+  -- если учетная запись не найдена или найдено несколько учетных записей с таким именем, возбуждает исключение
+  res  sec_user%rowtype;
+begin
+  select u.*
+    into STRICT res
+    from sec_user u
+   where upper(u.name) = upper($1);
+   return res;
+exception
+  when NO_DATA_FOUND then
+    -- 'SEC00001', 'user %s not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00001', p_user_name);
+    --execute env_raise_exception('P0002', 'SEC00001', p_user_name);
+  when TOO_MANY_ROWS then
+    -- 'SEC00002', 'user %s not unique'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00002', p_user_name);
+    --execute env_raise_exception('23505', 'SEC00002', p_user_name);
+end;
+$_$;
+
+
+ALTER FUNCTION public.sec_user_by_name(p_user_name text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_by_name(p_user_name text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_by_name(p_user_name text) IS 'поиск учетной записи по её имени. возвращает строку учетной записи, если такая найдена. если учетная запись не найдена или найдено несколько учетных записей с таким именем, возбуждает исключение';
 
 
 --
@@ -1404,44 +1627,6 @@ ALTER FUNCTION public.sec_user_create(p_person_id integer, p_name text, p_auth_p
 --
 
 COMMENT ON FUNCTION sec_user_create(p_person_id integer, p_name text, p_auth_path_id integer, p_credential text) IS 'создание учетной записи';
-
-
---
--- Name: sec_user_find_by_name(text); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION sec_user_find_by_name(p_user_name text) RETURNS sec_user
-    LANGUAGE plpgsql STABLE COST 10
-    AS $_$declare
-  -- поиск учетной записи по её имени. возвращает строку учетной записи, если такая найдена.
-  -- если учетная запись не найдена или найдено несколько учетных записей с таким именем, возбуждает исключение
-  res  sec_user%rowtype;
-begin
-  select u.*
-    into STRICT res
-    from sec_user u
-   where upper(u.name) = upper($1);
-   return res;
-exception
-  when NO_DATA_FOUND then
-    -- 'SEC00001', 'user %s not found'
-    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00001', p_user_name);
-    --execute env_raise_exception('P0002', 'SEC00001', p_user_name);
-  when TOO_MANY_ROWS then
-    -- 'SEC00002', 'user %s not unique'
-    raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00002', p_user_name);
-    --execute env_raise_exception('23505', 'SEC00002', p_user_name);
-end;
-$_$;
-
-
-ALTER FUNCTION public.sec_user_find_by_name(p_user_name text) OWNER TO postgres;
-
---
--- Name: FUNCTION sec_user_find_by_name(p_user_name text); Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON FUNCTION sec_user_find_by_name(p_user_name text) IS 'поиск учетной записи по её имени. возвращает строку учетной записи, если такая найдена. если учетная запись не найдена или найдено несколько учетных записей с таким именем, возбуждает исключение';
 
 
 --
@@ -2319,35 +2504,6 @@ COMMENT ON TABLE sec_authentication_kind IS 'схемы, виды аутенти
 
 
 --
--- Name: sec_authentication_path; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE sec_authentication_path (
-    id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    authentication_kind_id integer NOT NULL,
-    credential_kind character varying(50),
-    application_id integer
-);
-
-
-ALTER TABLE public.sec_authentication_path OWNER TO postgres;
-
---
--- Name: TABLE sec_authentication_path; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE sec_authentication_path IS 'методы, способы и источники проверки аутентификации';
-
-
---
--- Name: COLUMN sec_authentication_path.application_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_authentication_path.application_id IS 'id приложения';
-
-
---
 -- Name: sec_authentication_path_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
@@ -2366,6 +2522,108 @@ ALTER TABLE public.sec_authentication_path_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE sec_authentication_path_id_seq OWNED BY sec_authentication_path.id;
+
+
+--
+-- Name: sec_user_authcred_log; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_user_authcred_log (
+    log_id integer NOT NULL,
+    user_id integer NOT NULL,
+    auth_path_id integer NOT NULL,
+    credential character varying(511),
+    valid_from timestamp with time zone NOT NULL,
+    valid_till timestamp with time zone NOT NULL,
+    credential_hash text,
+    when_logged timestamp with time zone NOT NULL
+);
+
+
+ALTER TABLE public.sec_user_authcred_log OWNER TO postgres;
+
+--
+-- Name: TABLE sec_user_authcred_log; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_user_authcred_log IS 'Журнал изменений учетныx данныx для аутентификации';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.log_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.log_id IS 'идентификатор строки журнала';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.user_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.user_id IS 'код пользователя';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.credential; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.credential IS 'Учетные данные (хеш пароля, сертификат, идентификатор во внешней доверенной системе и т.п.)';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.valid_from; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.valid_from IS 'момент начала действия (включительно)';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.valid_till; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.valid_till IS 'момент окончания действия (включительно)';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.credential_hash; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.credential_hash IS 'Хеш учетных данных';
+
+
+--
+-- Name: COLUMN sec_user_authcred_log.when_logged; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred_log.when_logged IS 'Момент занесения в журнад';
+
+
+--
+-- Name: sec_user_authcred_log_log_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE sec_user_authcred_log_log_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sec_user_authcred_log_log_id_seq OWNER TO postgres;
+
+--
+-- Name: sec_user_authcred_log_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE sec_user_authcred_log_log_id_seq OWNED BY sec_user_authcred_log.log_id;
 
 
 --
@@ -2481,6 +2739,13 @@ ALTER TABLE ONLY sec_user ALTER COLUMN id SET DEFAULT nextval('sec_user_id_seq':
 
 
 --
+-- Name: log_id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user_authcred_log ALTER COLUMN log_id SET DEFAULT nextval('sec_user_authcred_log_log_id_seq'::regclass);
+
+
+--
 -- Data for Name: env_application; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -2583,6 +2848,10 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 20	1
 21	1
 5	1
+22	1
+23	1
+24	1
+25	1
 \.
 
 
@@ -2590,7 +2859,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 21, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 25, true);
 
 
 --
@@ -2630,11 +2899,15 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 15	session %s expired	SEC00006	45
 17	event %2$s not found in class %1$s	ENV00002	45
 18	event %2$s not unique in class %1$s	ENV00003	45
-16	login failed. wrong or unknown username (%s) or credential/authentication path	SEC00007	45
-19	logout failed. session id (%s) not found	SEC00008	45
 20	no valid credentials found for user (%s) and authentication path id (%s)	SEC00009	45
 21	authentication path id is not defined or user (%s) has more than one different authentication paths	SEC00010	45
 5	ok (no errors)	ANY00001	45
+22	authentication path id (%s) found	SEC00011	45
+23	authentication path id (%s) not unique	SEC00012	45
+16	wrong or unknown username (%s) or credential/authentication path	SEC00007	45
+19	session id (%s) not found	SEC00008	45
+24	user id %s not found	SEC00013	45
+25	user id %s not unique	SEC00014	45
 \.
 
 
@@ -4053,8 +4326,8 @@ SELECT pg_catalog.setval('sec_authentication_kind_id_seq', 2, false);
 -- Data for Name: sec_authentication_path; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_authentication_path (id, name, authentication_kind_id, credential_kind, application_id) FROM stdin;
-1	Пароль	1	bf	\N
+COPY sec_authentication_path (id, name, authentication_kind_id, credential_kind, application_id, credential_hash_kind) FROM stdin;
+1	Пароль	1	bf	\N	sha512
 \.
 
 
@@ -4102,9 +4375,24 @@ COPY sec_user (id, person_id, name) FROM stdin;
 -- Data for Name: sec_user_authcred; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_till) FROM stdin;
-1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1900-01-01 00:00:00+02:30:17	2999-12-31 00:00:00+03
+COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_till, credential_hash) FROM stdin;
+1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1900-01-01 00:00:00+02:30:17	2999-12-31 00:00:00+03	\N
 \.
+
+
+--
+-- Data for Name: sec_user_authcred_log; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_user_authcred_log (log_id, user_id, auth_path_id, credential, valid_from, valid_till, credential_hash, when_logged) FROM stdin;
+\.
+
+
+--
+-- Name: sec_user_authcred_log_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 1, false);
 
 
 --
@@ -4344,6 +4632,14 @@ ALTER TABLE ONLY sec_user
 
 ALTER TABLE ONLY sec_user_authcred
     ADD CONSTRAINT pk_sec_user_authcred PRIMARY KEY (user_id, auth_path_id);
+
+
+--
+-- Name: pk_sec_user_authcred_log; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_user_authcred_log
+    ADD CONSTRAINT pk_sec_user_authcred_log PRIMARY KEY (log_id);
 
 
 --
@@ -4600,6 +4896,22 @@ ALTER TABLE ONLY sec_user_authcred
 
 ALTER TABLE ONLY sec_user_authcred
     ADD CONSTRAINT fk_sec_user_authcred02 FOREIGN KEY (auth_path_id) REFERENCES sec_authentication_path(id);
+
+
+--
+-- Name: fk_sec_user_authcred_log01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user_authcred_log
+    ADD CONSTRAINT fk_sec_user_authcred_log01 FOREIGN KEY (user_id) REFERENCES sec_user(id);
+
+
+--
+-- Name: fk_sec_user_authcred_log02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user_authcred_log
+    ADD CONSTRAINT fk_sec_user_authcred_log02 FOREIGN KEY (auth_path_id) REFERENCES sec_authentication_path(id);
 
 
 --
