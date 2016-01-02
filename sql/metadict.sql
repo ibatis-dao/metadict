@@ -40,11 +40,247 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 SET search_path = public, pg_catalog;
 
 --
+-- Name: env_raise_exception(text, text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_raise_exception(p_errcode text, res_code text, param01 text DEFAULT NULL::text, param02 text DEFAULT NULL::text, param03 text DEFAULT NULL::text, param04 text DEFAULT NULL::text, param05 text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$
+begin
+  -- возбуждает исключение, заданное кодом p_errcode с текстом, заданным по коду сообщения res_code
+  raise exception using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_raise_exception(p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_raise_exception(p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_raise_exception(p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возбуждает исключение, заданное кодом p_errcode с текстом, заданным по коду сообщения res_code';
+
+
+--
+-- Name: env_raise_exception(integer, text, text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_raise_exception(p_level integer, p_errcode text, res_code text, param01 text DEFAULT NULL::text, param02 text DEFAULT NULL::text, param03 text DEFAULT NULL::text, param04 text DEFAULT NULL::text, param05 text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$
+declare
+  r record;
+begin
+  -- возбуждает исключение или создает сообщение другого указанного уровня важности с текстом, заданным по коду сообщения
+  -- DEBUG, LOG, INFO, NOTICE, WARNING, EXCEPTION
+  select "DEBUG", "LOG", "INFO", "NOTICE", "WARNING", "EXCEPTION" into r from env_severity_level();
+  case p_level
+    when r."EXCEPTION" then 
+      raise exception using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+    when r."WARNING" then 
+      raise warning using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+    when r."NOTICE" then 
+      raise notice using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+    when r."INFO" then 
+      raise info using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+    when r."LOG" then 
+      raise log using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+    when r."DEBUG" then 
+      raise debug using message = env_resource_text_format(res_code, param01, param02, param03, param04, param05), ERRCODE = p_errcode;
+    else
+      -- 'ENV00001', 'unknown severity level %s'
+      raise exception using message = env_resource_text_format('ENV00001', p_level::text), ERRCODE = p_errcode;
+  end case;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_raise_exception(p_level integer, p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_raise_exception(p_level integer, p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_raise_exception(p_level integer, p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возбуждает исключение или создает сообщение другого указанного уровня важности с текстом, заданным по коду сообщения';
+
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- Name: i18_language; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_language (
+    id integer NOT NULL,
+    name character varying(100),
+    alpha2code character(2),
+    alpha3code character(3),
+    scope smallint
+);
+
+
+ALTER TABLE public.i18_language OWNER TO postgres;
+
+--
+-- Name: TABLE i18_language; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_language IS 'Языки
+http://www-01.sil.org/iso639-3/documentation.asp?id=aplha3code';
+
+
+--
+-- Name: COLUMN i18_language.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.name IS 'Наименование языка';
+
+
+--
+-- Name: COLUMN i18_language.alpha2code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.alpha2code IS 'ISO 639-1 alpha 2 code';
+
+
+--
+-- Name: COLUMN i18_language.alpha3code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.alpha3code IS 'ISO 639-3 alpha 3 code';
+
+
+--
+-- Name: COLUMN i18_language.scope; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.scope IS 'Scope of denotation for language identifiers
+1=Individual languages
+2=Macrolanguages
+-Collections of languages
+-Dialects
+';
+
+
+--
+-- Name: i18_language_find_by_a2c(character); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION i18_language_find_by_a2c(p_alpha2code character) RETURNS i18_language
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$
+declare
+  res i18_language;
+begin
+  select *
+    into strict res
+   from i18_language
+  where alpha2code = p_alpha2code;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    --I1800001='language alpha2code=% not found (in i18_language)'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('I1800001', p_alpha2code);
+  when TOO_MANY_ROWS then
+    --I1800002='language alpha2code=% not unique'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('I1800002', p_alpha2code);
+end;
+$$;
+
+
+ALTER FUNCTION public.i18_language_find_by_a2c(p_alpha2code character) OWNER TO postgres;
+
+--
+-- Name: FUNCTION i18_language_find_by_a2c(p_alpha2code character); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION i18_language_find_by_a2c(p_alpha2code character) IS 'возвращает строку языка по его 2-х символьному коду';
+
+
+--
+-- Name: env_resource_text; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_resource_text (
+    id integer NOT NULL,
+    content text,
+    code character varying(10) NOT NULL,
+    language_id integer DEFAULT (i18_language_find_by_a2c('en'::bpchar)).id NOT NULL
+);
+
+
+ALTER TABLE public.env_resource_text OWNER TO postgres;
+
+--
+-- Name: TABLE env_resource_text; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_resource_text IS 'тексты сообщений, предупреждений, ошибок системы';
+
+
+--
+-- Name: COLUMN env_resource_text.content; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_resource_text.content IS 'текст сообщения';
+
+
+--
+-- Name: COLUMN env_resource_text.code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_resource_text.code IS 'символьный код сообщения';
+
+
+--
+-- Name: COLUMN env_resource_text.language_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_resource_text.language_id IS 'код языка';
+
+
+--
+-- Name: env_resource_text_create(character varying, text, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_resource_text_create(p_code character varying, p_content text, p_language_id integer DEFAULT NULL::integer, p_id integer DEFAULT NULL::integer) RETURNS env_resource_text
+    LANGUAGE plpgsql COST 1
+    AS $$
+declare
+  --вставляет текст сообщения и возвращает вставленноую строку
+  res  env_resource_text;
+begin
+  -- вставляем заголовок ресурса
+  insert into env_resource (id, resource_kind_id)
+  values (coalesce(p_id, nextval('env_resource_id_seq'::regclass)), 1) -- 1=текст
+  returning id into res.id;
+  -- вставляем тело текстового ресурса
+  insert into env_resource_text (id, code, language_id, content)
+  values (res.id, p_code, coalesce(p_language_id, (i18_language_find_by_a2c('en')::i18_language).id), p_content)
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_resource_text_create(p_code character varying, p_content text, p_language_id integer, p_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_resource_text_create(p_code character varying, p_content text, p_language_id integer, p_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_resource_text_create(p_code character varying, p_content text, p_language_id integer, p_id integer) IS 'вставляет текст сообщения и возвращает вставленноую строку';
+
+
+--
 -- Name: env_resource_text_format(integer, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
 CREATE FUNCTION env_resource_text_format(res_id integer, param01 text DEFAULT NULL::text, param02 text DEFAULT NULL::text, param03 text DEFAULT NULL::text, param04 text DEFAULT NULL::text, param05 text DEFAULT NULL::text) RETURNS text
-    LANGUAGE plpgsql
+    LANGUAGE plpgsql STABLE COST 5
     AS $$declare
   res_txt env_resource_text;
 begin
@@ -78,7 +314,7 @@ COMMENT ON FUNCTION env_resource_text_format(res_id integer, param01 text, param
 --
 
 CREATE FUNCTION env_resource_text_format(res_code text, param01 text DEFAULT NULL::text, param02 text DEFAULT NULL::text, param03 text DEFAULT NULL::text, param04 text DEFAULT NULL::text, param05 text DEFAULT NULL::text) RETURNS text
-    LANGUAGE plpgsql
+    LANGUAGE plpgsql STABLE COST 5
     AS $$declare
   res_txt env_resource_text;
 begin
@@ -105,6 +341,103 @@ ALTER FUNCTION public.env_resource_text_format(res_code text, param01 text, para
 --
 
 COMMENT ON FUNCTION env_resource_text_format(res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возвращает текст сообщения по его коду и подставляет значения параметров вместо символов подстановки';
+
+
+--
+-- Name: env_resource_text_update(integer, character varying, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_resource_text_update(p_id integer, p_code character varying, p_language_id integer, p_content text) RETURNS env_resource_text
+    LANGUAGE plpgsql COST 1
+    AS $$
+declare
+  --обновляет текст сообщения и возвращает обновленную строку
+  res  env_resource_text;
+begin
+  -- вставляем тело текстового ресурса
+  update env_resource_text 
+     set code = p_code, 
+         language_id = p_language_id, 
+         content = p_content
+   where id = p_id
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_resource_text_update(p_id integer, p_code character varying, p_language_id integer, p_content text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_resource_text_update(p_id integer, p_code character varying, p_language_id integer, p_content text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_resource_text_update(p_id integer, p_code character varying, p_language_id integer, p_content text) IS 'обновляет текст сообщения и возвращает обновленную строку';
+
+
+--
+-- Name: env_severity_level(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_severity_level(OUT "DEBUG" smallint, OUT "LOG" smallint, OUT "INFO" smallint, OUT "NOTICE" smallint, OUT "WARNING" smallint, OUT "EXCEPTION" smallint) RETURNS record
+    LANGUAGE plpgsql IMMUTABLE COST 1
+    AS $$
+begin
+  -- возвращает константные значения уровней важности сообщений
+  -- DEBUG, LOG, INFO, NOTICE, WARNING, EXCEPTION
+  "EXCEPTION" := 0;
+  "WARNING" := 1;
+  "NOTICE" := 2;
+  "INFO" := 3;
+  "LOG" := 4;
+  "DEBUG" := 5;
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_severity_level(OUT "DEBUG" smallint, OUT "LOG" smallint, OUT "INFO" smallint, OUT "NOTICE" smallint, OUT "WARNING" smallint, OUT "EXCEPTION" smallint) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_severity_level(OUT "DEBUG" smallint, OUT "LOG" smallint, OUT "INFO" smallint, OUT "NOTICE" smallint, OUT "WARNING" smallint, OUT "EXCEPTION" smallint); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_severity_level(OUT "DEBUG" smallint, OUT "LOG" smallint, OUT "INFO" smallint, OUT "NOTICE" smallint, OUT "WARNING" smallint, OUT "EXCEPTION" smallint) IS 'возвращает константные значения уровней важности сообщений';
+
+
+--
+-- Name: i18_language_find_by_a3c(character); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION i18_language_find_by_a3c(p_alpha3code character) RETURNS i18_language
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$
+declare
+  res i18_language;
+begin
+  select *
+    into strict res
+   from i18_language
+  where alpha3code = p_alpha3code;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    -- 'I1800003', 'language alpha3code=% not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('I1800003', p_alpha3code);
+  when TOO_MANY_ROWS then
+    -- 'I1800004', 'language alpha3code=% not unique'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('I1800004', p_alpha3code);
+end;
+$$;
+
+
+ALTER FUNCTION public.i18_language_find_by_a3c(p_alpha3code character) OWNER TO postgres;
+
+--
+-- Name: FUNCTION i18_language_find_by_a3c(p_alpha3code character); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION i18_language_find_by_a3c(p_alpha3code character) IS 'возвращает строку языка по его 3-х символьному коду';
 
 
 --
@@ -194,10 +527,6 @@ $$;
 
 
 ALTER FUNCTION public.uuid_generate() OWNER TO postgres;
-
-SET default_tablespace = '';
-
-SET default_with_oids = false;
 
 --
 -- Name: sec_session; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
@@ -605,15 +934,22 @@ CREATE FUNCTION sec_user_create(p_person_id integer, p_name text, auth_path_id i
   l_user  sec_user;
 begin
   --TODO: дописать
--- поиск существующего пользователя с таким именем
+  -- поиск существующего пользователя с таким именем
+  select * into l_user from sec_user_find_by_name(p_name);
+  if (l_user.id is not null) then
+    -- 'SEC00003', 'user %s already exists'
+    raise exception unique_violation using message = env_resource_text_format('SEC00003', p_name);
+  end if;
+/*
   begin
-    select * into l_user from sec_user_find_by_name(p_name);
+    
   exception
     when NO_DATA_FOUND then
       raise exception 'user % not found', p_user_name;
     when TOO_MANY_ROWS then
       raise exception 'user % not unique', p_user_name;
   end;
+  */
 end;
 $$;
 
@@ -625,7 +961,7 @@ ALTER FUNCTION public.sec_user_create(p_person_id integer, p_name text, auth_pat
 --
 
 CREATE FUNCTION sec_user_find_by_name(p_user_name text) RETURNS sec_user
-    LANGUAGE plpgsql COST 10
+    LANGUAGE plpgsql STABLE COST 10
     AS $_$declare
   -- поиск пользователя по его имени. возвращает строку пользователя, если такой найден.
   -- если пользователь не найден или найдено несколько пользователей с таким именем, возбуждает исключение
@@ -638,15 +974,40 @@ begin
    return res;
 exception
   when NO_DATA_FOUND then
-    --raise exception NO_DATA_FOUND using message = env_resource_text_format('user % not found', p_user_name  ERRCODE = 'unique_violation';
-    raise exception 'user % not found', p_user_name using ERRCODE = 'NO_DATA_FOUND';
+    -- 'SEC00001', 'user %s not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00001', p_user_name);
+    --execute env_raise_exception('P0002', 'SEC00001', p_user_name);
   when TOO_MANY_ROWS then
-    raise exception 'user % not unique', p_user_name using ERRCODE = 'TOO_MANY_ROWS';
+    -- 'SEC00002', 'user %s not unique'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00002', p_user_name);
+    --execute env_raise_exception('23505', 'SEC00002', p_user_name);
 end;
 $_$;
 
 
 ALTER FUNCTION public.sec_user_find_by_name(p_user_name text) OWNER TO postgres;
+
+--
+-- Name: test_env(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION test_env() RETURNS boolean
+    LANGUAGE plpgsql COST 10
+    AS $$
+declare
+  -- модульные тесты проверки функций окружения 
+  l_text  env_resource_text.content%type;
+begin
+  select env_resource_text_format('I1800001', 'zz') into l_text;
+  if (l_text is null) then
+    raise exception NO_DATA_FOUND using message = 'failed to format message with code I1800001';
+  end if;
+  return true;
+end;
+$$;
+
+
+ALTER FUNCTION public.test_env() OWNER TO postgres;
 
 --
 -- Name: test_sec(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -993,30 +1354,36 @@ ALTER SEQUENCE env_resource_kind_id_seq OWNED BY env_resource_kind.id;
 
 
 --
--- Name: env_resource_text; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+-- Name: env_severity_level; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
-CREATE TABLE env_resource_text (
-    id integer NOT NULL,
-    content text,
-    code character varying(10) NOT NULL
+CREATE TABLE env_severity_level (
+    id smallint NOT NULL,
+    name character varying(10) NOT NULL
 );
 
 
-ALTER TABLE public.env_resource_text OWNER TO postgres;
+ALTER TABLE public.env_severity_level OWNER TO postgres;
 
 --
--- Name: TABLE env_resource_text; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: TABLE env_severity_level; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE env_resource_text IS 'тексты сообщений, предупреждений, ошибок системы';
+COMMENT ON TABLE env_severity_level IS 'уровни важности сообщений';
 
 
 --
--- Name: COLUMN env_resource_text.code; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN env_severity_level.id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN env_resource_text.code IS 'символьный код сообщения';
+COMMENT ON COLUMN env_severity_level.id IS 'код';
+
+
+--
+-- Name: COLUMN env_severity_level.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_severity_level.name IS 'наименование';
 
 
 --
@@ -1188,62 +1555,6 @@ ALTER TABLE public.i18_currency_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE i18_currency_id_seq OWNED BY i18_currency.id;
-
-
---
--- Name: i18_language; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE i18_language (
-    id integer NOT NULL,
-    name character varying(100),
-    alpha2code character(2),
-    alpha3code character(3),
-    scope smallint
-);
-
-
-ALTER TABLE public.i18_language OWNER TO postgres;
-
---
--- Name: TABLE i18_language; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE i18_language IS 'Языки
-http://www-01.sil.org/iso639-3/documentation.asp?id=aplha3code';
-
-
---
--- Name: COLUMN i18_language.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN i18_language.name IS 'Наименование языка';
-
-
---
--- Name: COLUMN i18_language.alpha2code; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN i18_language.alpha2code IS 'ISO 639-1 alpha 2 code';
-
-
---
--- Name: COLUMN i18_language.alpha3code; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN i18_language.alpha3code IS 'ISO 639-3 alpha 3 code';
-
-
---
--- Name: COLUMN i18_language.scope; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN i18_language.scope IS 'Scope of denotation for language identifiers
-1=Individual languages
-2=Macrolanguages
--Collections of languages
--Dialects
-';
 
 
 --
@@ -1853,6 +2164,12 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 2	1
 3	1
 4	1
+6	1
+8	1
+9	1
+10	1
+11	1
+12	1
 \.
 
 
@@ -1860,7 +2177,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 4, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 12, true);
 
 
 --
@@ -1884,10 +2201,31 @@ SELECT pg_catalog.setval('env_resource_kind_id_seq', 2, true);
 -- Data for Name: env_resource_text; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY env_resource_text (id, content, code) FROM stdin;
-1	resource id=%1$s not found (in env_resource_text). can not format resource text	RES00001
-2	resource id=%1$s not unique	RES00002
-3	user %s not found	SEC00001
+COPY env_resource_text (id, content, code, language_id) FROM stdin;
+1	resource id=%1$s not found (in env_resource_text). can not format resource text	RES00001	45
+2	resource id=%1$s not unique	RES00002	45
+4	language alpha2code=%s not unique	I1800002	45
+3	language alpha2code=%s not found	I1800001	45
+6	language alpha3code=%s not found	I1800003	45
+8	language alpha3code=%s not unique	I1800004	45
+9	user %s not found	SEC00001	45
+10	user %s not unique	SEC00002	45
+11	unknown severity level (%s)	ENV00001	45
+12	user %s already exists	SEC00003	45
+\.
+
+
+--
+-- Data for Name: env_severity_level; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_severity_level (id, name) FROM stdin;
+0	EXCEPTION
+1	WARNING
+2	NOTICE
+3	INFO
+4	LOG
+5	DEBUG
 \.
 
 
@@ -3451,7 +3789,15 @@ ALTER TABLE ONLY env_resource_kind
 --
 
 ALTER TABLE ONLY env_resource_text
-    ADD CONSTRAINT pk_env_resource_text PRIMARY KEY (id);
+    ADD CONSTRAINT pk_env_resource_text PRIMARY KEY (id, language_id);
+
+
+--
+-- Name: pk_env_severity_level; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_severity_level
+    ADD CONSTRAINT pk_env_severity_level PRIMARY KEY (id);
 
 
 --
@@ -3583,6 +3929,14 @@ ALTER TABLE ONLY env_application
 
 
 --
+-- Name: uk_env_resource_text01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_resource_text
+    ADD CONSTRAINT uk_env_resource_text01 UNIQUE (code, language_id);
+
+
+--
 -- Name: uk_i18_country01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -3676,6 +4030,14 @@ ALTER TABLE ONLY env_resource
 
 ALTER TABLE ONLY env_resource_text
     ADD CONSTRAINT fk_env_resource_text01 FOREIGN KEY (id) REFERENCES env_resource(id);
+
+
+--
+-- Name: fk_env_resource_text02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_resource_text
+    ADD CONSTRAINT fk_env_resource_text02 FOREIGN KEY (language_id) REFERENCES i18_language(id);
 
 
 --
