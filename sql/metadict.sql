@@ -115,27 +115,27 @@ ALTER FUNCTION public.env_event_kind(p_class_name text, p_event_name text) OWNER
 -- Name: env_event_status(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint) RETURNS record
+CREATE FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) RETURNS record
     LANGUAGE plpgsql IMMUTABLE COST 1
     AS $$
 begin
   -- возвращает константные значения статусов событий
   -- STARTED, PROCESSED, ENDED
   "STARTED" := 1;
-  "PROCESSED" := 2;
+  "PROCESSING" := 2;
   "ENDED" := 3;
   return;
 end;
 $$;
 
 
-ALTER FUNCTION public.env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint) OWNER TO postgres;
+ALTER FUNCTION public.env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) OWNER TO postgres;
 
 --
--- Name: FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint) IS 'возвращает константные значения статусов событий';
+COMMENT ON FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) IS 'возвращает константные значения статусов событий';
 
 
 --
@@ -606,6 +606,71 @@ end;$$;
 ALTER FUNCTION public.mdd_class_upd("pCLASSID" bigint, "pBASECLASSID" bigint, "pNAME" character varying) OWNER TO postgres;
 
 --
+-- Name: sec_event; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_event (
+    whenfired timestamp with time zone NOT NULL,
+    event_kind integer NOT NULL,
+    event_status integer NOT NULL,
+    session_id uuid NOT NULL
+);
+
+
+ALTER TABLE public.sec_event OWNER TO postgres;
+
+--
+-- Name: COLUMN sec_event.whenfired; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.whenfired IS 'дата/вермя начала события';
+
+
+--
+-- Name: COLUMN sec_event.event_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.event_kind IS 'тип события';
+
+
+--
+-- Name: COLUMN sec_event.event_status; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.event_status IS 'статус события';
+
+
+--
+-- Name: COLUMN sec_event.session_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.session_id IS 'идентификатор сессии';
+
+
+--
+-- Name: sec_event_start(uuid, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_event_start(p_session_id uuid, p_class_name text, p_event_name text) RETURNS sec_event
+    LANGUAGE plpgsql COST 3
+    AS $$
+declare
+  -- регистрирует начало события с указанным именем и именем класса
+  res  sec_event;
+begin
+--  BEGIN SUBTRANSACTION;
+  insert into sec_event (session_id, whenfired, event_kind, event_status)
+  values (p_session_id, clock_timestamp(), (env_event_kind('sec_session', 'login_succeded')).id, (env_event_status())."STARTED")
+  returning * into res;
+--  COMMIT SUBTRANSACTION;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_event_start(p_session_id uuid, p_class_name text, p_event_name text) OWNER TO postgres;
+
+--
 -- Name: uuid_generate(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -706,12 +771,17 @@ begin
     insert into sec_session (id, user_id, whenstarted, credential, auth_path_id)
     values (uuid_generate(), l_uac.user_id, clock_timestamp(), l_uac.credential, l_uac.auth_path_id)
     returning * into l_session;
+    -- регистрируем событие логина
+    select sec_event_start(l_session.id, 'sec_session', 'login_succeded');
     -- возвращаем строку сессии
     return l_session;
   else 
     -- учетные данные не приняты
-    -- TODO: регистрация неудачной попытки логина в sec_event
-    raise exception 'Login failed (wrong or unknown username/credential/auth_path) for user_name=%, credential=%, auth_path_id=%', p_user_name, p_credential, p_auth_path_id;
+    -- регистрируем событие неудачной попытки логина
+    select sec_event_start(uuid_generate(), 'sec_session', 'login_failed');
+    -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
+    raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
+    return null;
   end if;
 end;
 $$;
@@ -2037,48 +2107,6 @@ ALTER SEQUENCE sec_authentication_path_id_seq OWNED BY sec_authentication_path.i
 
 
 --
--- Name: sec_event; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE sec_event (
-    whenfired timestamp with time zone NOT NULL,
-    event_kind integer NOT NULL,
-    event_status integer NOT NULL,
-    session_id uuid NOT NULL
-);
-
-
-ALTER TABLE public.sec_event OWNER TO postgres;
-
---
--- Name: COLUMN sec_event.whenfired; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_event.whenfired IS 'дата/вермя начала события';
-
-
---
--- Name: COLUMN sec_event.event_kind; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_event.event_kind IS 'тип события';
-
-
---
--- Name: COLUMN sec_event.event_status; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_event.event_status IS 'статус события';
-
-
---
--- Name: COLUMN sec_event.session_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_event.session_id IS 'идентификатор сессии';
-
-
---
 -- Name: sec_user_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
@@ -2332,9 +2360,9 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 13	access denied. has no permission (%s)	SEC00004	45
 14	session %s not found	SEC00005	45
 15	session %s expired	SEC00006	45
-16	login failed (wrong or unknown username/credential/authentication path)	SEC00007	45
 17	event %2$s not found in class %1$s	ENV00002	45
 18	event %2$s not unique in class %1$s	ENV00003	45
+16	login failed. wrong or unknown username (%s) or credential/authentication path	SEC00007	45
 \.
 
 
@@ -3770,6 +3798,8 @@ SELECT pg_catalog.setval('sec_authentication_path_id_seq', 2, true);
 --
 
 COPY sec_event (whenfired, event_kind, event_status, session_id) FROM stdin;
+2015-12-15 00:11:09.36655+03	1	1	0d64f5e2-c558-b11f-9efd-a10c77d60de1
+2015-12-15 00:22:28.786236+03	1	1	0d64f5e2-c558-b11f-9efd-a10c77d60de1
 \.
 
 
@@ -3783,6 +3813,7 @@ COPY sec_session (user_id, whenstarted, id, whenended, credential, auth_path_id)
 1	2015-12-03 23:23:01.995911+03	69fe54b6-bdd1-a72f-42d3-503a8a68584a	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
 1	2015-12-03 23:19:51.317474+03	b642c69e-9419-8661-f897-c0602dcdd5b9	\N	\N	1
 1	2015-12-03 23:47:48.062573+03	6b976b0d-f216-3515-18ec-cd5ae32b5596	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
+1	2015-12-14 23:07:15.094859+03	12de987a-656b-1fa3-1de4-f866079478c4	\N	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1
 \.
 
 
