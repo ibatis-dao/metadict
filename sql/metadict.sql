@@ -535,6 +535,37 @@ COMMENT ON FUNCTION env_severity_level(OUT "DEBUG" smallint, OUT "LOG" smallint,
 
 
 --
+-- Name: env_text_similar(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_text_similar(word1 text, word2 text, min_len integer DEFAULT 5) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE COST 2
+    AS $$declare
+  -- сравнивает две строки (word1, word2) на сходство. возвращает true, если две строки схожи и false - в противном случае.
+  -- строки считаются схожими, если у них есть общие части текста (последовательность символов не менее min_len символов)
+begin
+  if (word1 is not null) and (word2 is not null) then
+-- TODO: доделать
+    for i in 1 .. char_length(word1) loop
+      null;
+    end loop;
+  end if;
+  return false;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_text_similar(word1 text, word2 text, min_len integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_text_similar(word1 text, word2 text, min_len integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_text_similar(word1 text, word2 text, min_len integer) IS 'сравнивает две строки (word1, word2) на сходство. возвращает true, если две строки схожи и false - в противном случае.
+строки считаются схожими, если у них есть общие части текста (последовательность символов не менее min_len символов)';
+
+
+--
 -- Name: i18_language_find_by_a3c(character); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1254,13 +1285,20 @@ COMMENT ON FUNCTION sec_user_authcred_by_user_id(p_user_id integer, p_auth_path_
 --
 
 CREATE FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) RETURNS integer
-    LANGUAGE plpgsql COST 30
+    LANGUAGE plpgsql STABLE COST 30
     AS $$declare
-  -- проверка соответствия политике учетных данных
+  -- проверка соответствия политике учетных данных.
+  -- p_session_id - текущая сессия, p_user_id - учетная запись, для которой проверяются учетные данные на сответствие политике
+  -- p_old_credential "старые" (текущие) учетные данные, p_credential - "новые" учетные данные, p_auth_path_id - способ аутентификации
   l_session  sec_session; -- текущая сессия
   l_uac      sec_user_authcred;
   ok         boolean;
+  l_user     sec_user;
+  c          char(1);
   res        integer;
+  l_similarity  constant integer := 5; -- требуемая точность сходства
+  l_min_length  constant integer := 8; -- минимальная длина учетных данных
+  l_authcred_log_depth constant integer := 100; -- глубина просмотра журнала истории учетных данных
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
@@ -1269,21 +1307,51 @@ begin
   if (ok) then -- либо проверяем свои данные, либо есть полномочия на проверку чужих
     -- проверка "старых" (текущих) учетных данных для указанного пользователя
     select * into l_uac from sec_user_authcred_accepted(p_user_id, p_old_credential, p_auth_path_id) limit 1;
-    if (found) then -- учетные данные действительны
-      -- проверка отличия новых учетных данных от старых
-      if (p_old_credential = p_credential) then
+    if (found) then -- "старые" (текущие) учетные данные действительны
+      l_user := sec_user_by_id(p_user_id);
+      -- минимальная длина 
+      if (p_credential is null) or (char_length(p_credential) < l_min_length) then
         return env_resource_text_find_by_code('-----');
       end if;
-      /*
-      update sec_user_authcred acr
-         set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
-       where user_id = l_session.user_id
-         and auth_path_id = p_auth_path_id;
-      -- если учетные данные изменены
-      ok := found;
-      */
+      -- TODO: сложность (большие, маленькие буквы, цифры, знаки)
+      for i in 1 .. char_length(p_credential) loop
+        c := substring(p_credential from i for 1);
+        if position(c in '0123456789') = 0 then -- не содержит цифр
+          return env_resource_text_find_by_code('-----');
+        end if;
+        if regexp_matches(c, '[a-z,A-Z,а-я,А-Я]') is null then -- не содержит букв
+          return env_resource_text_find_by_code('-----');
+        end if;
+      end loop;
+      
+      -- если старые и новые учетные данные похожи сточностью до 5 общих символов подряд
+      if env_text_similar(p_old_credential, p_credential, l_similarity) then 
+        return env_resource_text_find_by_code('-----');
+      end if;
+      -- если имя учетной записи и новые учетные данные похожи сточностью до 5 общих символов подряд
+      if env_text_similar(l_user.name, p_credential, l_similarity) then 
+        return env_resource_text_find_by_code('-----');
+      end if;
+      -- поиск совпадений новых учетных данных со старыми во всей истории из 
+      -- журнала изменений учетных данных или с ограничением глубины анализа истории
+      select 1 
+        from sec_user_authcred_log cl
+       where cl.user_id = p_user_id 
+         and cl.auth_path_id = l_uac.auth_path_id
+         and cl.credential_hash = sec_user_authcred_hash(p_session_id, p_credential, l_uac.auth_path_id)
+         and row_number() over (order by cl.when_logged desc) < l_authcred_log_depth; -- глубина просмотра журнала истории
+      if (found) then -- совпадения найдены
+        return env_resource_text_find_by_code('-----');
+      end if;
+
+      -- TODO: проверка на совпадение со словарным словом
+      -- TODO: проверка на схожесть с одной из предсказуемых последовательностей символов
+
       -- "ANY00001", "ok (no errors)"
       return env_resource_text_find_by_code('ANY00001');
+    else 
+      -- 'SEC00009', 'no valid credentials found for user (%s) and authentication path id (%s)'
+      return env_resource_text_find_by_code('SEC00009', l_user.name, p_auth_path_id::text);
     end if;
   else 
     -- код ошибки SEC00004, "access denied. has no permission (%s)"
@@ -1350,7 +1418,7 @@ COMMENT ON FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential te
 --
 
 CREATE FUNCTION sec_user_authcred_hash(p_session_id uuid, p_credential text, p_auth_path_id integer) RETURNS text
-    LANGUAGE plpgsql COST 30
+    LANGUAGE plpgsql STABLE COST 30
     AS $$declare
   -- возвращает хеш учетных данных
   l_session  sec_session; -- текущая сессия
