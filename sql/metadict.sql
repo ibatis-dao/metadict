@@ -39,6 +39,105 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 SET search_path = public, pg_catalog;
 
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- Name: env_event_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_event_kind (
+    id integer NOT NULL,
+    name text,
+    class_id integer NOT NULL
+);
+
+
+ALTER TABLE public.env_event_kind OWNER TO postgres;
+
+--
+-- Name: COLUMN env_event_kind.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_kind.id IS 'идентификатор события';
+
+
+--
+-- Name: COLUMN env_event_kind.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_kind.name IS 'наименование';
+
+
+--
+-- Name: COLUMN env_event_kind.class_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_kind.class_id IS 'тип класса/сущности';
+
+
+--
+-- Name: env_event_kind(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_event_kind(p_class_name text, p_event_name text) RETURNS env_event_kind
+    LANGUAGE plpgsql COST 1
+    AS $_$
+declare
+  -- ищет код события по его имени и имени класса
+  res      env_event_kind;
+begin
+  select e.*
+    into strict res
+    from env_class c,
+         env_event_kind e
+   where e.class_id = c.id
+     and c.name = p_class_name
+     and e.name = p_event_name;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    -- 'ENV00002', 'event %2$s not found in class %1$s'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('ENV00002', p_class_name, p_event_name);
+    --execute env_raise_exception('P0002', 'ENV00002', p_class_name, p_event_name);
+  when TOO_MANY_ROWS then
+    -- 'ENV00003', 'event %2$s not unique in class %1$s'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('ENV00003', p_class_name, p_event_name);
+    --execute env_raise_exception('23505', 'ENV00003', p_class_name, p_event_name);
+end;
+$_$;
+
+
+ALTER FUNCTION public.env_event_kind(p_class_name text, p_event_name text) OWNER TO postgres;
+
+--
+-- Name: env_event_status(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint) RETURNS record
+    LANGUAGE plpgsql IMMUTABLE COST 1
+    AS $$
+begin
+  -- возвращает константные значения статусов событий
+  -- STARTED, PROCESSED, ENDED
+  "STARTED" := 1;
+  "PROCESSED" := 2;
+  "ENDED" := 3;
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION public.env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSED" smallint, OUT "ENDED" smallint) IS 'возвращает константные значения статусов событий';
+
+
 --
 -- Name: env_raise_exception(text, text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
@@ -104,10 +203,6 @@ ALTER FUNCTION public.env_raise_exception(p_level integer, p_errcode text, res_c
 
 COMMENT ON FUNCTION env_raise_exception(p_level integer, p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возбуждает исключение или создает сообщение другого указанного уровня важности с текстом, заданным по коду сообщения';
 
-
-SET default_tablespace = '';
-
-SET default_with_oids = false;
 
 --
 -- Name: i18_language; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
@@ -690,6 +785,40 @@ $$;
 ALTER FUNCTION public.sec_session_has_role(p_session_id uuid, p_role_name text) OWNER TO postgres;
 
 --
+-- Name: sec_session_valid(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_session_valid(p_session_id uuid) RETURNS sec_session
+    LANGUAGE plpgsql STABLE COST 10
+    AS $$
+declare
+  -- проверки валидности сессии
+  l_session  sec_session; -- текущая сессия
+  now        timestamp with time zone;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_find_by_id(p_session_id);
+  if (found) then
+    -- сессия найдена
+    now := clock_timestamp();
+    if (l_session.whenstarted > now) or (coalesce(l_session.whenended, now) < now) then
+      -- период действия сессии ещё не наступил или уже окончен
+      -- 'SEC00006', 'session %s expired'
+      raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00006', p_session_id);
+    end if;
+    return l_session;
+  else
+    -- сессия не найдена
+    -- 'SEC00005', 'session %s not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00005', p_session_id);
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_session_valid(p_session_id uuid) OWNER TO postgres;
+
+--
 -- Name: sec_user_authcred; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -824,7 +953,7 @@ CREATE FUNCTION sec_user_authcred_reset(p_session_id uuid, p_old_credential text
   ok         boolean;
 begin
   -- текущая сессия
-  select * into l_session from sec_session_find_by_id(p_session_id);
+  select * into l_session from sec_session_valid(p_session_id);
   -- проверка текущих учетных данных
   select * into l_uac from sec_user_authcred_accepted(l_session.user_id, p_old_credential, p_auth_path_id) limit 1;
   ok := found;
@@ -865,7 +994,7 @@ CREATE FUNCTION sec_user_authcred_reset_any(p_session_id uuid, p_user_name text,
   ok boolean;
 begin
   -- текущая сессия
-  select * into l_session from sec_session_find_by_id(p_session_id);
+  select * into l_session from sec_session_valid(p_session_id);
   -- указанный пользователь
   select * into l_user from sec_user_find_by_name(p_user_name);
   --наличие полномочий на смену чужих учетных данных или попытка сменить свои
@@ -927,34 +1056,44 @@ COMMENT ON TABLE sec_user IS 'пользователи';
 -- Name: sec_user_create(integer, text, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_user_create(p_person_id integer, p_name text, auth_path_id integer, p_credential text) RETURNS sec_user
+CREATE FUNCTION sec_user_create(p_person_id integer, p_name text, p_auth_path_id integer, p_credential text) RETURNS sec_user
     LANGUAGE plpgsql COST 10
     AS $$declare
-  -- создание пользователя
+  -- создание учетной записи
   l_user  sec_user;
+  ok      boolean;
+  l_authcred  sec_user_authcred;
 begin
-  --TODO: дописать
-  -- поиск существующего пользователя с таким именем
+  -- поиск существующей учетной записи с таким именем
   select * into l_user from sec_user_find_by_name(p_name);
   if (l_user.id is not null) then
     -- 'SEC00003', 'user %s already exists'
     raise exception unique_violation using message = env_resource_text_format('SEC00003', p_name);
   end if;
-/*
-  begin
-    
-  exception
-    when NO_DATA_FOUND then
-      raise exception 'user % not found', p_user_name;
-    when TOO_MANY_ROWS then
-      raise exception 'user % not unique', p_user_name;
-  end;
-  */
+  -- наличие полномочий на создание учетной записи
+  select sec_session_has_permission(p_session_id, 'sec_user.create') into ok;
+  if (ok) then
+    -- полномочий достаточно, создаем учетную запись
+    insert into sec_user (id, person_id, name)
+    values (default, p_person_id, p_name)
+    returning * into l_user;
+    -- TODO: проверка учетных данных (пароля) на соответствие политике. 
+    -- Готовим учетные данные к хранению (хеш пароля, сертификат, идентификатор во внешней доверенной системе и т.п.)
+    l_authcred.credential := sec_user_authcred_prepare(l_user.id, p_credential, p_auth_path_id);
+    insert into sec_user_authcred(user_id, auth_path_id, credential) 
+    values (l_user.id, p_auth_path_id, l_authcred.credential)
+    returning * into l_authcred;
+    return l_user;
+  else
+    -- нет полномочий на создание учетной записи
+    -- 'SEC00004', 'access denied. has no permission (%s)'
+    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user.create');
+  end if;
 end;
 $$;
 
 
-ALTER FUNCTION public.sec_user_create(p_person_id integer, p_name text, auth_path_id integer, p_credential text) OWNER TO postgres;
+ALTER FUNCTION public.sec_user_create(p_person_id integer, p_name text, p_auth_path_id integer, p_credential text) OWNER TO postgres;
 
 --
 -- Name: sec_user_find_by_name(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -1169,40 +1308,6 @@ ALTER TABLE public.env_class_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE env_class_id_seq OWNED BY env_class.id;
-
-
---
--- Name: env_event_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE env_event_kind (
-    id integer NOT NULL,
-    name text,
-    class_id integer NOT NULL
-);
-
-
-ALTER TABLE public.env_event_kind OWNER TO postgres;
-
---
--- Name: COLUMN env_event_kind.id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_kind.id IS 'идентификатор события';
-
-
---
--- Name: COLUMN env_event_kind.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_kind.name IS 'наименование';
-
-
---
--- Name: COLUMN env_event_kind.class_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_kind.class_id IS 'тип класса/сущности';
 
 
 --
@@ -1675,10 +1780,10 @@ CREATE SEQUENCE mdd_datatype_sq
 ALTER TABLE public.mdd_datatype_sq OWNER TO postgres;
 
 --
--- Name: person; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+-- Name: prs_person; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
-CREATE TABLE person (
+CREATE TABLE prs_person (
     id integer NOT NULL,
     citizenship_country_id integer,
     language_id integer,
@@ -1686,41 +1791,41 @@ CREATE TABLE person (
 );
 
 
-ALTER TABLE public.person OWNER TO postgres;
+ALTER TABLE public.prs_person OWNER TO postgres;
 
 --
--- Name: TABLE person; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: TABLE prs_person; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE person IS 'физ. и юр.лица';
-
-
---
--- Name: COLUMN person.citizenship_country_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN person.citizenship_country_id IS 'гражданство, национальная принадлежность, подданство';
+COMMENT ON TABLE prs_person IS 'физ. и юр.лица';
 
 
 --
--- Name: COLUMN person.language_id; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN prs_person.citizenship_country_id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN person.language_id IS 'родной (основной) язык для общения';
-
-
---
--- Name: COLUMN person.person_kind_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN person.person_kind_id IS 'тип персоны';
+COMMENT ON COLUMN prs_person.citizenship_country_id IS 'гражданство, национальная принадлежность, подданство';
 
 
 --
--- Name: person_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: COLUMN prs_person.language_id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE person_id_seq
+COMMENT ON COLUMN prs_person.language_id IS 'родной (основной) язык для общения';
+
+
+--
+-- Name: COLUMN prs_person.person_kind_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN prs_person.person_kind_id IS 'тип персоны';
+
+
+--
+-- Name: prs_person_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE prs_person_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1728,20 +1833,20 @@ CREATE SEQUENCE person_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.person_id_seq OWNER TO postgres;
+ALTER TABLE public.prs_person_id_seq OWNER TO postgres;
 
 --
--- Name: person_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: prs_person_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
-ALTER SEQUENCE person_id_seq OWNED BY person.id;
+ALTER SEQUENCE prs_person_id_seq OWNED BY prs_person.id;
 
 
 --
--- Name: person_individual; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+-- Name: prs_person_individual; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
-CREATE TABLE person_individual (
+CREATE TABLE prs_person_individual (
     person_id integer NOT NULL,
     last_name character varying(255),
     middle_name character varying(255),
@@ -1750,60 +1855,60 @@ CREATE TABLE person_individual (
 );
 
 
-ALTER TABLE public.person_individual OWNER TO postgres;
+ALTER TABLE public.prs_person_individual OWNER TO postgres;
 
 --
--- Name: TABLE person_individual; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: TABLE prs_person_individual; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE person_individual IS 'Физические лица';
-
-
---
--- Name: COLUMN person_individual.last_name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN person_individual.last_name IS 'Фамилия';
+COMMENT ON TABLE prs_person_individual IS 'Физические лица';
 
 
 --
--- Name: COLUMN person_individual.middle_name; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN prs_person_individual.last_name; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN person_individual.middle_name IS 'Отчество';
-
-
---
--- Name: COLUMN person_individual.first_name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN person_individual.first_name IS 'Имя';
+COMMENT ON COLUMN prs_person_individual.last_name IS 'Фамилия';
 
 
 --
--- Name: COLUMN person_individual.birthdate; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN prs_person_individual.middle_name; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN person_individual.birthdate IS 'Дата рождения';
+COMMENT ON COLUMN prs_person_individual.middle_name IS 'Отчество';
 
 
 --
--- Name: person_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+-- Name: COLUMN prs_person_individual.first_name; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-CREATE TABLE person_kind (
+COMMENT ON COLUMN prs_person_individual.first_name IS 'Имя';
+
+
+--
+-- Name: COLUMN prs_person_individual.birthdate; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN prs_person_individual.birthdate IS 'Дата рождения';
+
+
+--
+-- Name: prs_person_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE prs_person_kind (
     id integer NOT NULL,
     name character varying(100) NOT NULL
 );
 
 
-ALTER TABLE public.person_kind OWNER TO postgres;
+ALTER TABLE public.prs_person_kind OWNER TO postgres;
 
 --
--- Name: person_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: prs_person_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE person_kind_id_seq
+CREATE SEQUENCE prs_person_kind_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -1811,40 +1916,40 @@ CREATE SEQUENCE person_kind_id_seq
     CACHE 1;
 
 
-ALTER TABLE public.person_kind_id_seq OWNER TO postgres;
+ALTER TABLE public.prs_person_kind_id_seq OWNER TO postgres;
 
 --
--- Name: person_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: prs_person_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
 --
 
-ALTER SEQUENCE person_kind_id_seq OWNED BY person_kind.id;
+ALTER SEQUENCE prs_person_kind_id_seq OWNED BY prs_person_kind.id;
 
 
 --
--- Name: person_legal; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+-- Name: prs_person_legal; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
-CREATE TABLE person_legal (
+CREATE TABLE prs_person_legal (
     person_id integer NOT NULL,
     name_short character varying(255),
     name_long character varying(511)
 );
 
 
-ALTER TABLE public.person_legal OWNER TO postgres;
+ALTER TABLE public.prs_person_legal OWNER TO postgres;
 
 --
--- Name: COLUMN person_legal.name_short; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN prs_person_legal.name_short; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN person_legal.name_short IS 'Краткое наименование';
+COMMENT ON COLUMN prs_person_legal.name_short IS 'Краткое наименование';
 
 
 --
--- Name: COLUMN person_legal.name_long; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN prs_person_legal.name_long; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN person_legal.name_long IS 'Полное наименование';
+COMMENT ON COLUMN prs_person_legal.name_long IS 'Полное наименование';
 
 
 --
@@ -2061,14 +2166,14 @@ ALTER TABLE ONLY i18_language ALTER COLUMN id SET DEFAULT nextval('i18_language_
 -- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY person ALTER COLUMN id SET DEFAULT nextval('person_id_seq'::regclass);
+ALTER TABLE ONLY prs_person ALTER COLUMN id SET DEFAULT nextval('prs_person_id_seq'::regclass);
 
 
 --
 -- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY person_kind ALTER COLUMN id SET DEFAULT nextval('person_kind_id_seq'::regclass);
+ALTER TABLE ONLY prs_person_kind ALTER COLUMN id SET DEFAULT nextval('prs_person_kind_id_seq'::regclass);
 
 
 --
@@ -2115,6 +2220,7 @@ COPY env_application_relation (id, related_to_id) FROM stdin;
 --
 
 COPY env_class (id, name) FROM stdin;
+1	sec_session
 \.
 
 
@@ -2122,7 +2228,7 @@ COPY env_class (id, name) FROM stdin;
 -- Name: env_class_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_class_id_seq', 1, false);
+SELECT pg_catalog.setval('env_class_id_seq', 1, true);
 
 
 --
@@ -2130,6 +2236,8 @@ SELECT pg_catalog.setval('env_class_id_seq', 1, false);
 --
 
 COPY env_event_kind (id, name, class_id) FROM stdin;
+1	login_succeded	1
+2	login_failed	1
 \.
 
 
@@ -2137,7 +2245,7 @@ COPY env_event_kind (id, name, class_id) FROM stdin;
 -- Name: env_event_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_event_kind_id_seq', 1, false);
+SELECT pg_catalog.setval('env_event_kind_id_seq', 2, true);
 
 
 --
@@ -2145,6 +2253,9 @@ SELECT pg_catalog.setval('env_event_kind_id_seq', 1, false);
 --
 
 COPY env_event_status (id, name) FROM stdin;
+1	началось
+2	в процессе
+3	окончено
 \.
 
 
@@ -2170,6 +2281,12 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 10	1
 11	1
 12	1
+13	1
+14	1
+15	1
+16	1
+17	1
+18	1
 \.
 
 
@@ -2177,7 +2294,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 12, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 18, true);
 
 
 --
@@ -2212,6 +2329,12 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 10	user %s not unique	SEC00002	45
 11	unknown severity level (%s)	ENV00001	45
 12	user %s already exists	SEC00003	45
+13	access denied. has no permission (%s)	SEC00004	45
+14	session %s not found	SEC00005	45
+15	session %s expired	SEC00006	45
+16	login failed (wrong or unknown username/credential/authentication path)	SEC00007	45
+17	event %2$s not found in class %1$s	ENV00002	45
+18	event %2$s not unique in class %1$s	ENV00003	45
 \.
 
 
@@ -3557,10 +3680,10 @@ SELECT pg_catalog.setval('mdd_datatype_sq', 1, false);
 
 
 --
--- Data for Name: person; Type: TABLE DATA; Schema: public; Owner: postgres
+-- Data for Name: prs_person; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY person (id, citizenship_country_id, language_id, person_kind_id) FROM stdin;
+COPY prs_person (id, citizenship_country_id, language_id, person_kind_id) FROM stdin;
 1	182	137	1
 2	182	137	1
 3	182	137	1
@@ -3568,26 +3691,26 @@ COPY person (id, citizenship_country_id, language_id, person_kind_id) FROM stdin
 
 
 --
--- Name: person_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+-- Name: prs_person_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('person_id_seq', 4, true);
+SELECT pg_catalog.setval('prs_person_id_seq', 4, true);
 
 
 --
--- Data for Name: person_individual; Type: TABLE DATA; Schema: public; Owner: postgres
+-- Data for Name: prs_person_individual; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY person_individual (person_id, last_name, middle_name, first_name, birthdate) FROM stdin;
+COPY prs_person_individual (person_id, last_name, middle_name, first_name, birthdate) FROM stdin;
 1	root	root	root	\N
 \.
 
 
 --
--- Data for Name: person_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+-- Data for Name: prs_person_kind; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY person_kind (id, name) FROM stdin;
+COPY prs_person_kind (id, name) FROM stdin;
 0	не указано
 1	физическое лицо
 2	юридическое лицо
@@ -3595,17 +3718,17 @@ COPY person_kind (id, name) FROM stdin;
 
 
 --
--- Name: person_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+-- Name: prs_person_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('person_kind_id_seq', 1, false);
+SELECT pg_catalog.setval('prs_person_kind_id_seq', 1, false);
 
 
 --
--- Data for Name: person_legal; Type: TABLE DATA; Schema: public; Owner: postgres
+-- Data for Name: prs_person_legal; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY person_legal (person_id, name_short, name_long) FROM stdin;
+COPY prs_person_legal (person_id, name_short, name_long) FROM stdin;
 \.
 
 
@@ -3841,35 +3964,35 @@ ALTER TABLE ONLY i18_language
 
 
 --
--- Name: pk_person01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+-- Name: pk_prs_person01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
-ALTER TABLE ONLY person
-    ADD CONSTRAINT pk_person01 PRIMARY KEY (id);
-
-
---
--- Name: pk_person_individual01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
---
-
-ALTER TABLE ONLY person_individual
-    ADD CONSTRAINT pk_person_individual01 PRIMARY KEY (person_id);
+ALTER TABLE ONLY prs_person
+    ADD CONSTRAINT pk_prs_person01 PRIMARY KEY (id);
 
 
 --
--- Name: pk_person_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+-- Name: pk_prs_person_individual; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
-ALTER TABLE ONLY person_kind
-    ADD CONSTRAINT pk_person_kind PRIMARY KEY (id);
+ALTER TABLE ONLY prs_person_individual
+    ADD CONSTRAINT pk_prs_person_individual PRIMARY KEY (person_id);
 
 
 --
--- Name: pk_person_legal01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+-- Name: pk_prs_person_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
-ALTER TABLE ONLY person_legal
-    ADD CONSTRAINT pk_person_legal01 PRIMARY KEY (person_id);
+ALTER TABLE ONLY prs_person_kind
+    ADD CONSTRAINT pk_prs_person_kind PRIMARY KEY (id);
+
+
+--
+-- Name: pk_prs_person_legal; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY prs_person_legal
+    ADD CONSTRAINT pk_prs_person_legal PRIMARY KEY (person_id);
 
 
 --
@@ -4065,43 +4188,43 @@ ALTER TABLE ONLY i18_currency_country
 
 
 --
--- Name: fk_person01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: fk_prs_person01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY person
-    ADD CONSTRAINT fk_person01 FOREIGN KEY (citizenship_country_id) REFERENCES i18_country(id);
-
-
---
--- Name: fk_person02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY person
-    ADD CONSTRAINT fk_person02 FOREIGN KEY (language_id) REFERENCES i18_language(id);
+ALTER TABLE ONLY prs_person
+    ADD CONSTRAINT fk_prs_person01 FOREIGN KEY (citizenship_country_id) REFERENCES i18_country(id);
 
 
 --
--- Name: fk_person03; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: fk_prs_person02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY person
-    ADD CONSTRAINT fk_person03 FOREIGN KEY (person_kind_id) REFERENCES person_kind(id);
-
-
---
--- Name: fk_person_individual01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY person_individual
-    ADD CONSTRAINT fk_person_individual01 FOREIGN KEY (person_id) REFERENCES person(id);
+ALTER TABLE ONLY prs_person
+    ADD CONSTRAINT fk_prs_person02 FOREIGN KEY (language_id) REFERENCES i18_language(id);
 
 
 --
--- Name: fk_person_legal01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: fk_prs_person03; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY person_legal
-    ADD CONSTRAINT fk_person_legal01 FOREIGN KEY (person_id) REFERENCES person(id);
+ALTER TABLE ONLY prs_person
+    ADD CONSTRAINT fk_prs_person03 FOREIGN KEY (person_kind_id) REFERENCES prs_person_kind(id);
+
+
+--
+-- Name: fk_prs_person_individual01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY prs_person_individual
+    ADD CONSTRAINT fk_prs_person_individual01 FOREIGN KEY (person_id) REFERENCES prs_person(id);
+
+
+--
+-- Name: fk_prs_person_legal01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY prs_person_legal
+    ADD CONSTRAINT fk_prs_person_legal01 FOREIGN KEY (person_id) REFERENCES prs_person(id);
 
 
 --
@@ -4157,7 +4280,7 @@ ALTER TABLE ONLY sec_session
 --
 
 ALTER TABLE ONLY sec_user
-    ADD CONSTRAINT fk_sec_user01 FOREIGN KEY (person_id) REFERENCES person(id);
+    ADD CONSTRAINT fk_sec_user01 FOREIGN KEY (person_id) REFERENCES prs_person(id);
 
 
 --
