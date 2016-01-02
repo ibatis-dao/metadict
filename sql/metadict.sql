@@ -371,6 +371,40 @@ COMMENT ON FUNCTION env_resource_text_create(p_code character varying, p_content
 
 
 --
+-- Name: env_resource_text_find_by_code(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_resource_text_find_by_code(res_code text) RETURNS integer
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  res  integer;
+begin
+  select id
+    into strict res
+   from env_resource_text
+  where code = res_code;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    raise exception 'resource code=% not found (in env_resource_text)', res_code;
+  when TOO_MANY_ROWS then
+    raise exception 'resource code=% not unique', res_code;
+end;
+
+  
+$$;
+
+
+ALTER FUNCTION public.env_resource_text_find_by_code(res_code text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_resource_text_find_by_code(res_code text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_resource_text_find_by_code(res_code text) IS 'возвращает идентификатор сообщения по его коду';
+
+
+--
 -- Name: env_resource_text_format(integer, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -671,6 +705,13 @@ $$;
 ALTER FUNCTION public.sec_event_start(p_session_id uuid, p_class_name text, p_event_name text) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_event_start(p_session_id uuid, p_class_name text, p_event_name text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_event_start(p_session_id uuid, p_class_name text, p_event_name text) IS 'регистрирует начало события с указанным именем и именем класса';
+
+
+--
 -- Name: uuid_generate(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -687,6 +728,13 @@ $$;
 
 
 ALTER FUNCTION public.uuid_generate() OWNER TO postgres;
+
+--
+-- Name: FUNCTION uuid_generate(); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION uuid_generate() IS 'random UUID generation';
+
 
 --
 -- Name: sec_session; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
@@ -790,6 +838,56 @@ $$;
 ALTER FUNCTION public.sec_login(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer) IS 'аутентификация. возвращает идентификатор сессии, если аутентификация выполнена успешно. в противном случае возвращает NULL';
+
+
+--
+-- Name: sec_logout(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_logout(p_session_id uuid) RETURNS sec_session
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- завершает указанную сессию. возвращает строку сессии, если сессия завершена успешно. в противном случае возвращает null
+  l_session  sec_session%rowtype;
+begin
+  -- проверка действительности сессии
+  select * into l_session from sec_session_valid(p_session_id);
+  if (found) then
+    -- сессия действительна, завершаем её
+    update sec_session 
+       set whenended = clock_timestamp()
+     where id = p_session_id
+    returning * into l_session;
+    -- регистрируем событие логаута
+    select sec_event_start(p_session_id, 'sec_session', 'logout_succeded');
+    -- возвращаем строку сессии
+    return l_session;
+  else 
+    -- сессия не действительна
+    -- регистрируем событие неудачной попытки логаута
+    select sec_event_start(p_session_id, 'sec_session', 'logout_failed');
+    -- 'SEC00008', 'logout failed. session id (%s) not found'
+    raise warning invalid_password using message = env_resource_text_format('SEC00008', p_session_id);
+    return null;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_logout(p_session_id uuid) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_logout(p_session_id uuid); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_logout(p_session_id uuid) IS 'завершает указанную сессию. возвращает строку сессии, если сессия завершена успешно. в противном случае возвращает null';
+
+
+--
 -- Name: sec_session_find_by_id(uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -815,6 +913,13 @@ $$;
 ALTER FUNCTION public.sec_session_find_by_id(p_session_id uuid) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_session_find_by_id(p_session_id uuid); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_session_find_by_id(p_session_id uuid) IS 'поиск сессии по её идентификатору. возвращает строку сессии, если такая найдена. если сессия не найдена, возбуждает исключение';
+
+
+--
 -- Name: sec_session_has_permission(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -835,6 +940,13 @@ $$;
 ALTER FUNCTION public.sec_session_has_permission(p_session_id uuid, p_permission_name text) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_session_has_permission(p_session_id uuid, p_permission_name text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_session_has_permission(p_session_id uuid, p_permission_name text) IS 'возвращает наличие указанного разрешения в указанной сессии';
+
+
+--
 -- Name: sec_session_has_role(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -853,6 +965,13 @@ $$;
 
 
 ALTER FUNCTION public.sec_session_has_role(p_session_id uuid, p_role_name text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_session_has_role(p_session_id uuid, p_role_name text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_session_has_role(p_session_id uuid, p_role_name text) IS 'возвращает наличие указанной роли в указанной сессии';
+
 
 --
 -- Name: sec_session_valid(uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -889,13 +1008,22 @@ $$;
 ALTER FUNCTION public.sec_session_valid(p_session_id uuid) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_session_valid(p_session_id uuid); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_session_valid(p_session_id uuid) IS 'проверки валидности сессии';
+
+
+--
 -- Name: sec_user_authcred; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
 CREATE TABLE sec_user_authcred (
     user_id integer NOT NULL,
     auth_path_id integer NOT NULL,
-    credential character varying(511)
+    credential character varying(511),
+    valid_from timestamp with time zone NOT NULL,
+    valid_till timestamp with time zone NOT NULL
 );
 
 
@@ -930,6 +1058,20 @@ COMMENT ON COLUMN sec_user_authcred.credential IS 'Учетные данные (
 
 
 --
+-- Name: COLUMN sec_user_authcred.valid_from; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred.valid_from IS 'момент начала действия (включительно)';
+
+
+--
+-- Name: COLUMN sec_user_authcred.valid_till; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred.valid_till IS 'момент окончания действия (включительно)';
+
+
+--
 -- Name: sec_user_authcred_accepted(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -938,23 +1080,32 @@ CREATE FUNCTION sec_user_authcred_accepted(p_user_id integer, p_credential text,
     AS $_$
   -- проверка учетных данных. возвращает набор, для которых учетные данные приняты (подтверждены).
   -- если учетные данные не приняты, возвращает пустой набор
-  select acr.*
+  select /* sec_0001 */
+         acr.*
     from sec_user_authcred acr,
          sec_authentication_path ap,
          sec_authentication_kind ak
-   where (acr.user_id = $1)
-     and (acr.auth_path_id = $3 or $3 is null)
+   where (acr.user_id = $1) -- id учетной записи
+     and (acr.auth_path_id = $3 or $3 is null) -- источник (поставщик) аутентификации
+     and (clock_timestamp() between acr.valid_from and acr.valid_till) --срок действия учетных данных
      and (ap.id = acr.auth_path_id)
      and (ak.id = ap.authentication_kind_id)
-     and case -- обработка разных типов аутентификации
-           -- при добавлении новых видов аутентификации их обработку надо добавить сюда
-           when (ak.code = 'pg_crypt') and (crypt($2, acr.credential) = acr.credential) then true
+         -- собственно, проверка самих учетных данных разными источниками (поставщиками) аутентификации
+     and case -- при появлении новых видов аутентификации их обработку надо добавить сюда
+           when (ak.code = 'pg_crypt') and (crypt($2, acr.credential) = acr.credential) then true 
            else false
          end;
 $_$;
 
 
 ALTER FUNCTION public.sec_user_authcred_accepted(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_accepted(p_user_id integer, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_accepted(p_user_id integer, p_credential text, p_auth_path_id integer) IS 'проверка учетных данных. возвращает набор, для которых учетные данные приняты (подтверждены). если учетные данные не приняты, возвращает пустой набор';
+
 
 --
 -- Name: sec_user_authcred_accepted(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
@@ -967,13 +1118,73 @@ CREATE FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential text, 
   -- если учетные данные не приняты, возвращает пустой набор
   l_user_id  integer;
 begin
-  select id into l_user_id from sec_user_find_by_name(p_user_name);
-  return query select * from sec_user_authcred_accepted(l_user_id, p_credential, p_auth_path_id);
+  select /* sec_0002 */ id into l_user_id from sec_user_find_by_name(p_user_name);
+  return query select /* sec_0003 */ * from sec_user_authcred_accepted(l_user_id, p_credential, p_auth_path_id);
 end;
 $$;
 
 
 ALTER FUNCTION public.sec_user_authcred_accepted(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential text, p_auth_path_id integer) IS 'проверка учетных данных. возвращает набор, для которых учетные данные приняты (подтверждены). если учетные данные не приняты, возвращает пустой набор';
+
+
+--
+-- Name: sec_user_authcred_comply_policy(uuid, integer, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) RETURNS integer
+    LANGUAGE plpgsql COST 30
+    AS $$declare
+  -- проверка соответствия политике учетных данных
+  l_session  sec_session; -- текущая сессия
+  l_uac      sec_user_authcred;
+  ok         boolean;
+  res        integer;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_valid(p_session_id);
+  -- наличие полномочий на проверку чужих учетных данных или попытка проверить свои
+  select (l_session.user_id = p_user_id) or sec_session_has_permission(p_session_id, 'sec_user_authcred.comply_policy') into ok;
+  if (ok) then -- либо проверяем свои данные, либо есть полномочия на проверку чужих
+    -- проверка "старых" (текущих) учетных данных для указанного пользователя
+    select * into l_uac from sec_user_authcred_accepted(p_user_id, p_old_credential, p_auth_path_id) limit 1;
+    if (found) then -- учетные данные действительны
+      -- проверка отличия новых учетных данных от старых
+      /*
+      if (p_old_credential = p_credential) then
+      end if;
+      update sec_user_authcred acr
+         set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
+       where user_id = l_session.user_id
+         and auth_path_id = p_auth_path_id;
+      -- если учетные данные изменены
+      ok := found;
+      */
+      -- "ANY00001", "ok (no errors)"
+      return env_resource_text_find_by_code('ANY00001');
+    end if;
+  else 
+    -- код ошибки SEC00004, "access denied. has no permission (%s)"
+    return env_resource_text_find_by_code('SEC00004');
+  end if;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_comply_policy(p_session_id uuid, p_user_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) IS 'проверка соответствия политике учетных данных';
+
 
 --
 -- Name: sec_user_authcred_prepare(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
@@ -1011,6 +1222,13 @@ $_$;
 ALTER FUNCTION public.sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) IS 'возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью';
+
+
+--
 -- Name: sec_user_authcred_reset(uuid, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1030,7 +1248,8 @@ begin
   if (ok) then
     -- наличие полномочий на смену своих учетных данных
     select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset') into ok;
-    -- TODO: написать проверку политики учетных данных и вызвать её здесь
+    -- TODO: проверка соответствия политике учетных данных
+    -- sec_user_authcred_comply_policy(p_session_id, l_session.user_id, p_old_credential, p_credential, p_auth_path_id);
     if (ok) then
       -- полномочий достаточно, меняем учетные данные
       update sec_user_authcred acr
@@ -1049,39 +1268,45 @@ $$;
 ALTER FUNCTION public.sec_user_authcred_reset(p_session_id uuid, p_old_credential text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_user_authcred_reset(p_session_id uuid, p_old_credential text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_reset(p_session_id uuid, p_old_credential text, p_credential text, p_auth_path_id integer) IS 'смена своих учетных данных (пароля)';
+
+
+--
 -- Name: sec_user_authcred_reset_any(uuid, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
 CREATE FUNCTION sec_user_authcred_reset_any(p_session_id uuid, p_user_name text, p_credential text, p_auth_path_id integer) RETURNS boolean
     LANGUAGE plpgsql COST 30
     AS $$declare
-  -- смена учетных данных (пароля) для указанного пользователя
+  -- смена учетных данных (p_credential) для указанной учетной записи (p_user_name)
   l_session sec_session; -- текущая сессия
-  l_user sec_user; -- пользователь, для которого меняются учетные данные
-  dummy integer;
-  minid integer;
-  cntid integer;
+  l_user sec_user; -- учетная запись, для которого меняются учетные данные
   ok boolean;
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
-  -- указанный пользователь
+  -- указанная учетная запись
   select * into l_user from sec_user_find_by_name(p_user_name);
   --наличие полномочий на смену чужих учетных данных или попытка сменить свои
   select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset_any') or (l_session.user_id = l_user.id) into ok;
-  raise WARNING 'This is not you session or you has no permission (%) to change other`s credential', 'sec_user_authcred.reset_any';
   if (ok) then
     if (p_auth_path_id is null) then
       begin
         select auth_path_id
           into strict p_auth_path_id
           from sec_user_authcred
-         where user_id = l_user.id;
+         where user_id = l_user.id
+           and (clock_timestamp() between valid_from and valid_till); --срок действия учетных данных
       exception
         when NO_DATA_FOUND then
-          raise exception 'credentials for user % not found', p_user_name;
+          -- 'SEC00009', 'no valid credentials found for user (%s) and authentication path id (%s)'
+          raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00009', p_user_name, p_auth_path_id::text);
         when TOO_MANY_ROWS then
-          raise exception 'p_auth_path_id is not defined or user (%) has more than one different authentication path', p_user_name;
+          -- 'SEC00010', 'authentication path id is not defined or user (%s) has more than one different authentication paths'
+          raise exception TOO_MANY_ROWS using message = env_resource_text_format('SEC00010', p_user_name);
       end;
     end if;
     -- TODO: написать проверку политики учетных данных и вызвать её здесь
@@ -1092,6 +1317,8 @@ begin
        and auth_path_id = p_auth_path_id;
     -- если учетные данные изменены
     ok := found;
+  else
+    raise WARNING 'This is not you session or you has no permission (%) to change other`s credential', 'sec_user_authcred.reset_any';
   end if;
   return ok;
 end;
@@ -1099,6 +1326,13 @@ $$;
 
 
 ALTER FUNCTION public.sec_user_authcred_reset_any(p_session_id uuid, p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_reset_any(p_session_id uuid, p_user_name text, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_reset_any(p_session_id uuid, p_user_name text, p_credential text, p_auth_path_id integer) IS 'смена учетных данных (p_credential) для указанной учетной записи (p_user_name)';
+
 
 SET default_with_oids = true;
 
@@ -1166,14 +1400,21 @@ $$;
 ALTER FUNCTION public.sec_user_create(p_person_id integer, p_name text, p_auth_path_id integer, p_credential text) OWNER TO postgres;
 
 --
+-- Name: FUNCTION sec_user_create(p_person_id integer, p_name text, p_auth_path_id integer, p_credential text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_create(p_person_id integer, p_name text, p_auth_path_id integer, p_credential text) IS 'создание учетной записи';
+
+
+--
 -- Name: sec_user_find_by_name(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
 CREATE FUNCTION sec_user_find_by_name(p_user_name text) RETURNS sec_user
     LANGUAGE plpgsql STABLE COST 10
     AS $_$declare
-  -- поиск пользователя по его имени. возвращает строку пользователя, если такой найден.
-  -- если пользователь не найден или найдено несколько пользователей с таким именем, возбуждает исключение
+  -- поиск учетной записи по её имени. возвращает строку учетной записи, если такая найдена.
+  -- если учетная запись не найдена или найдено несколько учетных записей с таким именем, возбуждает исключение
   res  sec_user%rowtype;
 begin
   select u.*
@@ -1195,6 +1436,13 @@ $_$;
 
 
 ALTER FUNCTION public.sec_user_find_by_name(p_user_name text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_find_by_name(p_user_name text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_find_by_name(p_user_name text) IS 'поиск учетной записи по её имени. возвращает строку учетной записи, если такая найдена. если учетная запись не найдена или найдено несколько учетных записей с таким именем, возбуждает исключение';
+
 
 --
 -- Name: test_env(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -1219,13 +1467,20 @@ $$;
 ALTER FUNCTION public.test_env() OWNER TO postgres;
 
 --
+-- Name: FUNCTION test_env(); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION test_env() IS 'модульные тесты проверки функций окружения';
+
+
+--
 -- Name: test_sec(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
 CREATE FUNCTION test_sec() RETURNS boolean
     LANGUAGE plpgsql COST 10
     AS $$declare
-  -- модульные тесты проверки операций над учетными данными 
+  -- модульные тесты проверки операций над учетными записями и учетными данными
   l_user  sec_user;
   l_user_id  integer;
 begin
@@ -1256,6 +1511,13 @@ $$;
 
 
 ALTER FUNCTION public.test_sec() OWNER TO postgres;
+
+--
+-- Name: FUNCTION test_sec(); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION test_sec() IS 'модульные тесты проверки операций над учетными записями и учетными данными';
+
 
 SET default_with_oids = false;
 
@@ -2266,6 +2528,8 @@ SELECT pg_catalog.setval('env_class_id_seq', 1, true);
 COPY env_event_kind (id, name, class_id) FROM stdin;
 1	login_succeded	1
 2	login_failed	1
+4	logout_succeded	1
+5	logout_failed	1
 \.
 
 
@@ -2273,7 +2537,7 @@ COPY env_event_kind (id, name, class_id) FROM stdin;
 -- Name: env_event_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_event_kind_id_seq', 2, true);
+SELECT pg_catalog.setval('env_event_kind_id_seq', 5, true);
 
 
 --
@@ -2315,6 +2579,10 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 16	1
 17	1
 18	1
+19	1
+20	1
+21	1
+5	1
 \.
 
 
@@ -2322,7 +2590,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 18, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 21, true);
 
 
 --
@@ -2363,6 +2631,10 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 17	event %2$s not found in class %1$s	ENV00002	45
 18	event %2$s not unique in class %1$s	ENV00003	45
 16	login failed. wrong or unknown username (%s) or credential/authentication path	SEC00007	45
+19	logout failed. session id (%s) not found	SEC00008	45
+20	no valid credentials found for user (%s) and authentication path id (%s)	SEC00009	45
+21	authentication path id is not defined or user (%s) has more than one different authentication paths	SEC00010	45
+5	ok (no errors)	ANY00001	45
 \.
 
 
@@ -3830,8 +4102,8 @@ COPY sec_user (id, person_id, name) FROM stdin;
 -- Data for Name: sec_user_authcred; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_user_authcred (user_id, auth_path_id, credential) FROM stdin;
-1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu
+COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_till) FROM stdin;
+1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1900-01-01 00:00:00+02:30:17	2999-12-31 00:00:00+03
 \.
 
 
