@@ -1,0 +1,3830 @@
+--
+-- PostgreSQL database dump
+--
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SET check_function_bodies = false;
+SET client_min_messages = warning;
+
+--
+-- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: 
+--
+
+CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
+
+
+--
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: 
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+SET search_path = public, pg_catalog;
+
+--
+-- Name: env_resource_text_format(integer, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_resource_text_format(res_id integer, param01 text DEFAULT NULL::text, param02 text DEFAULT NULL::text, param03 text DEFAULT NULL::text, param04 text DEFAULT NULL::text, param05 text DEFAULT NULL::text) RETURNS text
+    LANGUAGE plpgsql
+    AS $$declare
+  res_txt env_resource_text;
+begin
+  select *
+    into strict res_txt
+   from env_resource_text
+  where id = res_id;
+  return format(res_txt.content, param01, param02, param03, param04, param05);
+exception
+  when NO_DATA_FOUND then
+    raise exception 'resource id=% not found (in env_resource_text). can not format resource text', res_id;
+  when TOO_MANY_ROWS then
+    raise exception 'resource id=% not unique', res_id;
+end;
+
+  
+$$;
+
+
+ALTER FUNCTION public.env_resource_text_format(res_id integer, param01 text, param02 text, param03 text, param04 text, param05 text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_resource_text_format(res_id integer, param01 text, param02 text, param03 text, param04 text, param05 text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_resource_text_format(res_id integer, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возвращает текст сообщения по его коду и подставляет значения параметров вместо символов подстановки';
+
+
+--
+-- Name: env_resource_text_format(text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION env_resource_text_format(res_code text, param01 text DEFAULT NULL::text, param02 text DEFAULT NULL::text, param03 text DEFAULT NULL::text, param04 text DEFAULT NULL::text, param05 text DEFAULT NULL::text) RETURNS text
+    LANGUAGE plpgsql
+    AS $$declare
+  res_txt env_resource_text;
+begin
+  select *
+    into strict res_txt
+   from env_resource_text
+  where code = res_code;
+  return format(res_txt.content, param01, param02, param03, param04, param05);
+exception
+  when NO_DATA_FOUND then
+    raise exception 'resource code=% not found (in env_resource_text). can not format resource text', res_code;
+  when TOO_MANY_ROWS then
+    raise exception 'resource code=% not unique', res_code;
+end;
+
+  
+$$;
+
+
+ALTER FUNCTION public.env_resource_text_format(res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) OWNER TO postgres;
+
+--
+-- Name: FUNCTION env_resource_text_format(res_code text, param01 text, param02 text, param03 text, param04 text, param05 text); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION env_resource_text_format(res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возвращает текст сообщения по его коду и подставляет значения параметров вместо символов подстановки';
+
+
+--
+-- Name: mdd_class_del(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION mdd_class_del("pCLASSID" bigint) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$declare
+  c mdd_class;
+begin
+  delete from mdd_class_extention
+   where class_id = "pCLASSID";
+  --
+  delete from mdd_class 
+   where id = "pCLASSID"
+  returning * into c;
+  --
+  return c.ID;
+end;$$;
+
+
+ALTER FUNCTION public.mdd_class_del("pCLASSID" bigint) OWNER TO postgres;
+
+--
+-- Name: mdd_class_ins(bigint, bigint, character varying); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION mdd_class_ins("pCLASSID" bigint, "pBASECLASSID" bigint, "pNAME" character varying) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$declare
+  c mdd_class;
+begin
+  insert into mdd_class (id, name)
+  values (coalesce("pCLASSID", nextval('mdd_class_sq')), "pNAME")
+  returning * into c;
+  --
+  if ("pBASECLASSID" is not null) then
+    insert into mdd_class_extention (class_id, base_class_id)
+    values (c.ID, "pBASECLASSID");
+  end if;
+  --
+  return c.ID;
+end;$$;
+
+
+ALTER FUNCTION public.mdd_class_ins("pCLASSID" bigint, "pBASECLASSID" bigint, "pNAME" character varying) OWNER TO postgres;
+
+--
+-- Name: mdd_class_upd(bigint, bigint, character varying); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION mdd_class_upd("pCLASSID" bigint, "pBASECLASSID" bigint, "pNAME" character varying) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$declare
+  c mdd_class;
+begin
+  update mdd_class 
+     set name = "pNAME"
+   where id = "pCLASSID"
+  returning * into c;
+  --
+  update mdd_class_extention
+     set base_class_id = "pBASECLASSID"
+   where class_id = "pCLASSID";
+  --
+  return c.ID;
+end;$$;
+
+
+ALTER FUNCTION public.mdd_class_upd("pCLASSID" bigint, "pBASECLASSID" bigint, "pNAME" character varying) OWNER TO postgres;
+
+--
+-- Name: uuid_generate(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION uuid_generate() RETURNS uuid
+    LANGUAGE plpgsql COST 5
+    AS $$declare
+  l_result uuid;
+begin
+  -- random UUID generation 
+  select md5(random()::text || clock_timestamp()::text)::uuid into l_result;
+  return l_result;
+end;
+$$;
+
+
+ALTER FUNCTION public.uuid_generate() OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
+
+--
+-- Name: sec_session; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_session (
+    user_id integer NOT NULL,
+    whenstarted timestamp with time zone NOT NULL,
+    id uuid DEFAULT uuid_generate() NOT NULL,
+    whenended timestamp with time zone,
+    credential character varying(511),
+    auth_path_id integer NOT NULL
+);
+
+
+ALTER TABLE public.sec_session OWNER TO postgres;
+
+--
+-- Name: TABLE sec_session; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_session IS 'сессии пользователей';
+
+
+--
+-- Name: COLUMN sec_session.user_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session.user_id IS 'код пользователя';
+
+
+--
+-- Name: COLUMN sec_session.whenstarted; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session.whenstarted IS 'дата/время начала сессии';
+
+
+--
+-- Name: COLUMN sec_session.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session.id IS 'идентификатор сессии';
+
+
+--
+-- Name: COLUMN sec_session.whenended; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session.whenended IS 'дата/время завершения сессии (если была завершена явным образом)';
+
+
+--
+-- Name: COLUMN sec_session.credential; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session.credential IS 'Учетные данные, использованные при аутентификации';
+
+
+--
+-- Name: COLUMN sec_session.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: sec_login(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer DEFAULT NULL::integer) RETURNS sec_session
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- аутентификация. возвращает идентификатор сессии, если аутентификация выполнена успешно. в противном случае возвращает NULL
+  l_uac      sec_user_authcred;
+  l_session  sec_session%rowtype;
+begin
+  -- проверка указанных учетных данных
+  select * into l_uac from sec_user_authcred_accepted(p_user_name, p_credential, p_auth_path_id) limit 1;
+  if (found) then
+    -- учетные данные приняты, создаем сессию
+    insert into sec_session (id, user_id, whenstarted, credential, auth_path_id)
+    values (uuid_generate(), l_uac.user_id, clock_timestamp(), l_uac.credential, l_uac.auth_path_id)
+    returning * into l_session;
+    -- возвращаем строку сессии
+    return l_session;
+  else 
+    -- учетные данные не приняты
+    -- TODO: регистрация неудачной попытки логина в sec_event
+    raise exception 'Login failed (wrong or unknown username/credential/auth_path) for user_name=%, credential=%, auth_path_id=%', p_user_name, p_credential, p_auth_path_id;
+  end if;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_login(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: sec_session_find_by_id(uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_session_find_by_id(p_session_id uuid) RETURNS sec_session
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- поиск сессии по её идентификатору. возвращает строку сессии, если такая найдена.
+  -- если сессия не найдена, возбуждает исключение
+  res  sec_session%rowtype;
+begin
+  select s.* 
+    into strict res
+    from sec_session s 
+   where s.id = p_session_id;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    raise exception 'session_id % not found', p_session_id;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_session_find_by_id(p_session_id uuid) OWNER TO postgres;
+
+--
+-- Name: sec_session_has_permission(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_session_has_permission(p_session_id uuid, p_permission_name text) RETURNS boolean
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- возвращает наличие указанного разрешения в указанной сессии
+  l_session sec_session; -- текущая сессия
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_find_by_id(p_session_id);
+  -- TODO заменить на осмысленную проверку наличия разрешения
+  return true;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_session_has_permission(p_session_id uuid, p_permission_name text) OWNER TO postgres;
+
+--
+-- Name: sec_session_has_role(uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_session_has_role(p_session_id uuid, p_role_name text) RETURNS boolean
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- возвращает наличие указанной роли в указанной сессии
+  l_session sec_session; -- текущая сессия
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_find_by_id(p_session_id);
+  -- TODO заменить на осмысленную проверку наличия роли
+  return true;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_session_has_role(p_session_id uuid, p_role_name text) OWNER TO postgres;
+
+--
+-- Name: sec_user_authcred; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_user_authcred (
+    user_id integer NOT NULL,
+    auth_path_id integer NOT NULL,
+    credential character varying(511)
+);
+
+
+ALTER TABLE public.sec_user_authcred OWNER TO postgres;
+
+--
+-- Name: TABLE sec_user_authcred; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_user_authcred IS 'Учетные данные для аутентификации';
+
+
+--
+-- Name: COLUMN sec_user_authcred.user_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred.user_id IS 'код пользователя';
+
+
+--
+-- Name: COLUMN sec_user_authcred.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: COLUMN sec_user_authcred.credential; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user_authcred.credential IS 'Учетные данные (хеш пароля, сертификат, идентификатор во внешней доверенной системе и т.п.)';
+
+
+--
+-- Name: sec_user_authcred_accepted(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_accepted(p_user_id integer, p_credential text, p_auth_path_id integer DEFAULT NULL::integer) RETURNS SETOF sec_user_authcred
+    LANGUAGE sql COST 10
+    AS $_$
+  -- проверка учетных данных. возвращает набор, для которых учетные данные приняты (подтверждены).
+  -- если учетные данные не приняты, возвращает пустой набор
+  select acr.*
+    from sec_user_authcred acr,
+         sec_authentication_path ap,
+         sec_authentication_kind ak
+   where (acr.user_id = $1)
+     and (acr.auth_path_id = $3 or $3 is null)
+     and (ap.id = acr.auth_path_id)
+     and (ak.id = ap.authentication_kind_id)
+     and case -- обработка разных типов аутентификации
+           -- при добавлении новых видов аутентификации их обработку надо добавить сюда
+           when (ak.code = 'pg_crypt') and (crypt($2, acr.credential) = acr.credential) then true
+           else false
+         end;
+$_$;
+
+
+ALTER FUNCTION public.sec_user_authcred_accepted(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: sec_user_authcred_accepted(text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential text, p_auth_path_id integer DEFAULT NULL::integer) RETURNS SETOF sec_user_authcred
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- проверка учетных данных. возвращает набор, для которых учетные данные приняты (подтверждены).
+  -- если учетные данные не приняты, возвращает пустой набор
+  l_user_id  integer;
+begin
+  select id into l_user_id from sec_user_find_by_name(p_user_name);
+  return query select * from sec_user_authcred_accepted(l_user_id, p_credential, p_auth_path_id);
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_accepted(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: sec_user_authcred_prepare(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) RETURNS text
+    LANGUAGE plpgsql COST 10
+    AS $_$declare
+  -- возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью
+  res  text;
+begin
+  select case -- обработка разных типов аутентификации и разновидностей учетных данных.
+           -- при добавлении новых видов аутентификации их обработку надо добавить сюда
+           when (ak.code = 'pg_crypt') then crypt($2, gen_salt(ap.credential_kind))
+           else null
+         end
+    into strict res
+    from sec_user_authcred acr,
+         sec_authentication_path ap,
+         sec_authentication_kind ak
+   where (acr.user_id = $1)
+     and (acr.auth_path_id = $3)
+     and (ap.id = acr.auth_path_id)
+     and (ak.id = ap.authentication_kind_id);
+  return res;
+exception
+  when NO_DATA_FOUND then
+    raise exception 'user_id (%) and/or auth_path_id (%) not found', p_user_id, p_auth_path_id;
+  when TOO_MANY_ROWS then
+    raise exception 'user_id (%) and auth_path_id (%) are not unique', p_user_id, p_auth_path_id;
+end;
+$_$;
+
+
+ALTER FUNCTION public.sec_user_authcred_prepare(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: sec_user_authcred_reset(uuid, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_reset(p_session_id uuid, p_old_credential text, p_credential text, p_auth_path_id integer) RETURNS boolean
+    LANGUAGE plpgsql COST 30
+    AS $$declare
+  -- смена своих учетных данных (пароля)
+  l_session  sec_session; -- текущая сессия
+  l_uac      sec_user_authcred;
+  ok         boolean;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_find_by_id(p_session_id);
+  -- проверка текущих учетных данных
+  select * into l_uac from sec_user_authcred_accepted(l_session.user_id, p_old_credential, p_auth_path_id) limit 1;
+  ok := found;
+  if (ok) then
+    -- наличие полномочий на смену своих учетных данных
+    select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset') into ok;
+    -- TODO: написать проверку политики учетных данных и вызвать её здесь
+    if (ok) then
+      -- полномочий достаточно, меняем учетные данные
+      update sec_user_authcred acr
+         set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
+       where user_id = l_session.user_id
+         and auth_path_id = p_auth_path_id;
+      -- если учетные данные изменены
+      ok := found;
+    end if;
+  end if;
+  return ok;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_reset(p_session_id uuid, p_old_credential text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+--
+-- Name: sec_user_authcred_reset_any(uuid, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_reset_any(p_session_id uuid, p_user_name text, p_credential text, p_auth_path_id integer) RETURNS boolean
+    LANGUAGE plpgsql COST 30
+    AS $$declare
+  -- смена учетных данных (пароля) для указанного пользователя
+  l_session sec_session; -- текущая сессия
+  l_user sec_user; -- пользователь, для которого меняются учетные данные
+  dummy integer;
+  minid integer;
+  cntid integer;
+  ok boolean;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_find_by_id(p_session_id);
+  -- указанный пользователь
+  select * into l_user from sec_user_find_by_name(p_user_name);
+  --наличие полномочий на смену чужих учетных данных или попытка сменить свои
+  select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset_any') or (l_session.user_id = l_user.id) into ok;
+  raise WARNING 'This is not you session or you has no permission (%) to change other`s credential', 'sec_user_authcred.reset_any';
+  if (ok) then
+    if (p_auth_path_id is null) then
+      begin
+        select auth_path_id
+          into strict p_auth_path_id
+          from sec_user_authcred
+         where user_id = l_user.id;
+      exception
+        when NO_DATA_FOUND then
+          raise exception 'credentials for user % not found', p_user_name;
+        when TOO_MANY_ROWS then
+          raise exception 'p_auth_path_id is not defined or user (%) has more than one different authentication path', p_user_name;
+      end;
+    end if;
+    -- TODO: написать проверку политики учетных данных и вызвать её здесь
+    -- полномочий достаточно, меняем учетные данные
+    update sec_user_authcred
+       set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id)
+     where user_id = l_user.id
+       and auth_path_id = p_auth_path_id;
+    -- если учетные данные изменены
+    ok := found;
+  end if;
+  return ok;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_reset_any(p_session_id uuid, p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+
+SET default_with_oids = true;
+
+--
+-- Name: sec_user; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_user (
+    id integer NOT NULL,
+    person_id integer,
+    name character varying(50) NOT NULL
+);
+
+
+ALTER TABLE public.sec_user OWNER TO postgres;
+
+--
+-- Name: TABLE sec_user; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_user IS 'пользователи';
+
+
+--
+-- Name: sec_user_create(integer, text, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_create(p_person_id integer, p_name text, auth_path_id integer, p_credential text) RETURNS sec_user
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- создание пользователя
+  l_user  sec_user;
+begin
+  --TODO: дописать
+-- поиск существующего пользователя с таким именем
+  begin
+    select * into l_user from sec_user_find_by_name(p_name);
+  exception
+    when NO_DATA_FOUND then
+      raise exception 'user % not found', p_user_name;
+    when TOO_MANY_ROWS then
+      raise exception 'user % not unique', p_user_name;
+  end;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_create(p_person_id integer, p_name text, auth_path_id integer, p_credential text) OWNER TO postgres;
+
+--
+-- Name: sec_user_find_by_name(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_find_by_name(p_user_name text) RETURNS sec_user
+    LANGUAGE plpgsql COST 10
+    AS $_$declare
+  -- поиск пользователя по его имени. возвращает строку пользователя, если такой найден.
+  -- если пользователь не найден или найдено несколько пользователей с таким именем, возбуждает исключение
+  res  sec_user%rowtype;
+begin
+  select u.*
+    into STRICT res
+    from sec_user u
+   where upper(u.name) = upper($1);
+   return res;
+exception
+  when NO_DATA_FOUND then
+    --raise exception NO_DATA_FOUND using message = env_resource_text_format('user % not found', p_user_name  ERRCODE = 'unique_violation';
+    raise exception 'user % not found', p_user_name using ERRCODE = 'NO_DATA_FOUND';
+  when TOO_MANY_ROWS then
+    raise exception 'user % not unique', p_user_name using ERRCODE = 'TOO_MANY_ROWS';
+end;
+$_$;
+
+
+ALTER FUNCTION public.sec_user_find_by_name(p_user_name text) OWNER TO postgres;
+
+--
+-- Name: test_sec(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION test_sec() RETURNS boolean
+    LANGUAGE plpgsql COST 10
+    AS $$declare
+  -- модульные тесты проверки операций над учетными данными 
+  l_user  sec_user;
+  l_user_id  integer;
+begin
+  -- поиск пользователя
+  select * into l_user from sec_user_find_by_name('test-001');
+  /*
+﻿  -- поиск сессии
+  select sec_session_find_by_id('0d64f5e2-c558-b11f-9efd-a10c77d60de1');
+  -- сброс пароля
+  select sec_user_authcred_reset_any('0d64f5e2-c558-b11f-9efd-a10c77d60de1', 'root', 'password', 1);
+  -- сброс своего пароля
+  select sec_user_authcred_reset('0d64f5e2-c558-b11f-9efd-a10c77d60de1', 'password1', 'password', 1);
+  -- установка пароля
+  update sec_user_authcred acr
+     set credential = crypt('password', gen_salt('bf'))
+   where user_id = 1
+     and auth_path_id = 1;
+
+  -- попытка аутентификации
+  select sec_user_authcred_accepted('root', 'password');
+  --
+  select sec_user_authcred_accepted('root', 'password') limit 1;
+  --
+  select sec_user_authcred_prepare(1, 'password', 1);
+  */
+end;
+$$;
+
+
+ALTER FUNCTION public.test_sec() OWNER TO postgres;
+
+SET default_with_oids = false;
+
+--
+-- Name: env_application; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_application (
+    id integer NOT NULL,
+    code character varying(50),
+    name text
+);
+
+
+ALTER TABLE public.env_application OWNER TO postgres;
+
+--
+-- Name: TABLE env_application; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_application IS 'приложения, подсистемы, модули';
+
+
+--
+-- Name: env_application_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_application_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_application_id_seq OWNER TO postgres;
+
+--
+-- Name: env_application_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_application_id_seq OWNED BY env_application.id;
+
+
+--
+-- Name: env_application_relation; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_application_relation (
+    id integer NOT NULL,
+    related_to_id integer NOT NULL
+);
+
+
+ALTER TABLE public.env_application_relation OWNER TO postgres;
+
+--
+-- Name: TABLE env_application_relation; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_application_relation IS 'взаимозависимости приложений, подсистем, модулей';
+
+
+--
+-- Name: COLUMN env_application_relation.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_application_relation.id IS 'id приложения, подсистемы, модуля';
+
+
+--
+-- Name: COLUMN env_application_relation.related_to_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_application_relation.related_to_id IS 'id приложения, с которым связано данное';
+
+
+--
+-- Name: env_class; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_class (
+    id integer NOT NULL,
+    name text
+);
+
+
+ALTER TABLE public.env_class OWNER TO postgres;
+
+--
+-- Name: TABLE env_class; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_class IS 'типы сущностей, классы объектов приложения и предметной области';
+
+
+--
+-- Name: COLUMN env_class.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_class.name IS 'наименование';
+
+
+--
+-- Name: env_class_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_class_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_class_id_seq OWNER TO postgres;
+
+--
+-- Name: env_class_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_class_id_seq OWNED BY env_class.id;
+
+
+--
+-- Name: env_event_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_event_kind (
+    id integer NOT NULL,
+    name text,
+    class_id integer NOT NULL
+);
+
+
+ALTER TABLE public.env_event_kind OWNER TO postgres;
+
+--
+-- Name: COLUMN env_event_kind.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_kind.id IS 'идентификатор события';
+
+
+--
+-- Name: COLUMN env_event_kind.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_kind.name IS 'наименование';
+
+
+--
+-- Name: COLUMN env_event_kind.class_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_kind.class_id IS 'тип класса/сущности';
+
+
+--
+-- Name: env_event_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_event_kind_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_event_kind_id_seq OWNER TO postgres;
+
+--
+-- Name: env_event_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_event_kind_id_seq OWNED BY env_event_kind.id;
+
+
+--
+-- Name: env_event_status; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_event_status (
+    id integer NOT NULL,
+    name text
+);
+
+
+ALTER TABLE public.env_event_status OWNER TO postgres;
+
+--
+-- Name: TABLE env_event_status; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_event_status IS 'статус события';
+
+
+--
+-- Name: COLUMN env_event_status.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_event_status.name IS 'наименование события';
+
+
+--
+-- Name: env_event_status_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_event_status_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_event_status_id_seq OWNER TO postgres;
+
+--
+-- Name: env_event_status_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_event_status_id_seq OWNED BY env_event_status.id;
+
+
+--
+-- Name: env_resource; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_resource (
+    id integer NOT NULL,
+    resource_kind_id integer NOT NULL
+);
+
+
+ALTER TABLE public.env_resource OWNER TO postgres;
+
+--
+-- Name: TABLE env_resource; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_resource IS 'ресурсы приложения - строки, изображения, и т.п.';
+
+
+--
+-- Name: env_resource_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_resource_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_resource_id_seq OWNER TO postgres;
+
+--
+-- Name: env_resource_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_resource_id_seq OWNED BY env_resource.id;
+
+
+--
+-- Name: env_resource_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_resource_kind (
+    id integer NOT NULL,
+    name text NOT NULL
+);
+
+
+ALTER TABLE public.env_resource_kind OWNER TO postgres;
+
+--
+-- Name: TABLE env_resource_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_resource_kind IS 'типы ресурсов приожения';
+
+
+--
+-- Name: env_resource_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_resource_kind_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_resource_kind_id_seq OWNER TO postgres;
+
+--
+-- Name: env_resource_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_resource_kind_id_seq OWNED BY env_resource_kind.id;
+
+
+--
+-- Name: env_resource_text; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_resource_text (
+    id integer NOT NULL,
+    content text,
+    code character varying(10) NOT NULL
+);
+
+
+ALTER TABLE public.env_resource_text OWNER TO postgres;
+
+--
+-- Name: TABLE env_resource_text; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_resource_text IS 'тексты сообщений, предупреждений, ошибок системы';
+
+
+--
+-- Name: COLUMN env_resource_text.code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_resource_text.code IS 'символьный код сообщения';
+
+
+--
+-- Name: i18_country; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_country (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    number3code integer,
+    alpha2code character(2),
+    alpha3code character(3)
+);
+
+
+ALTER TABLE public.i18_country OWNER TO postgres;
+
+--
+-- Name: TABLE i18_country; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_country IS 'Страны';
+
+
+--
+-- Name: COLUMN i18_country.number3code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_country.number3code IS 'ISO 3166 Number3 code';
+
+
+--
+-- Name: COLUMN i18_country.alpha2code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_country.alpha2code IS 'ISO 3166 Alpha2 code';
+
+
+--
+-- Name: COLUMN i18_country.alpha3code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_country.alpha3code IS 'ISO 3166 Alpha3 code';
+
+
+--
+-- Name: i18_country_depend; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_country_depend (
+    number3code integer NOT NULL,
+    dependent_text character(50)
+);
+
+
+ALTER TABLE public.i18_country_depend OWNER TO postgres;
+
+--
+-- Name: TABLE i18_country_depend; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_country_depend IS 'Принадлежность / подчиненность стран';
+
+
+--
+-- Name: i18_country_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE i18_country_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.i18_country_id_seq OWNER TO postgres;
+
+--
+-- Name: i18_country_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE i18_country_id_seq OWNED BY i18_country.id;
+
+
+--
+-- Name: i18_country_phoneprefix; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_country_phoneprefix (
+    number3code integer NOT NULL,
+    prefix character(5) NOT NULL
+);
+
+
+ALTER TABLE public.i18_country_phoneprefix OWNER TO postgres;
+
+--
+-- Name: TABLE i18_country_phoneprefix; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_country_phoneprefix IS 'телефонные коды стран';
+
+
+--
+-- Name: i18_currency; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_currency (
+    id integer NOT NULL,
+    name character varying(250),
+    alpha3code character(3),
+    numeric3code smallint,
+    minor_unit smallint,
+    is_fund boolean
+);
+
+
+ALTER TABLE public.i18_currency OWNER TO postgres;
+
+--
+-- Name: TABLE i18_currency; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_currency IS 'валюты
+ISO 4217
+http://www.currency-iso.org/en/home/tables/table-a1.html
+';
+
+
+--
+-- Name: i18_currency_country; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_currency_country (
+    alpha3code character(3) NOT NULL,
+    entity character varying(250) NOT NULL
+);
+
+
+ALTER TABLE public.i18_currency_country OWNER TO postgres;
+
+--
+-- Name: TABLE i18_currency_country; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_currency_country IS 'валюты стран
+ISO 4217
+http://www.currency-iso.org/en/home/tables/table-a1.html
+';
+
+
+--
+-- Name: i18_currency_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE i18_currency_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.i18_currency_id_seq OWNER TO postgres;
+
+--
+-- Name: i18_currency_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE i18_currency_id_seq OWNED BY i18_currency.id;
+
+
+--
+-- Name: i18_language; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE i18_language (
+    id integer NOT NULL,
+    name character varying(100),
+    alpha2code character(2),
+    alpha3code character(3),
+    scope smallint
+);
+
+
+ALTER TABLE public.i18_language OWNER TO postgres;
+
+--
+-- Name: TABLE i18_language; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE i18_language IS 'Языки
+http://www-01.sil.org/iso639-3/documentation.asp?id=aplha3code';
+
+
+--
+-- Name: COLUMN i18_language.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.name IS 'Наименование языка';
+
+
+--
+-- Name: COLUMN i18_language.alpha2code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.alpha2code IS 'ISO 639-1 alpha 2 code';
+
+
+--
+-- Name: COLUMN i18_language.alpha3code; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.alpha3code IS 'ISO 639-3 alpha 3 code';
+
+
+--
+-- Name: COLUMN i18_language.scope; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN i18_language.scope IS 'Scope of denotation for language identifiers
+1=Individual languages
+2=Macrolanguages
+-Collections of languages
+-Dialects
+';
+
+
+--
+-- Name: i18_language_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE i18_language_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.i18_language_id_seq OWNER TO postgres;
+
+--
+-- Name: i18_language_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE i18_language_id_seq OWNED BY i18_language.id;
+
+
+--
+-- Name: mdd_datatype; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE mdd_datatype (
+    id bigint NOT NULL,
+    name character varying(128)
+);
+
+
+ALTER TABLE public.mdd_datatype OWNER TO postgres;
+
+--
+-- Name: TABLE mdd_datatype; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE mdd_datatype IS 'Типы данных';
+
+
+--
+-- Name: mdd_class; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE mdd_class (
+)
+INHERITS (mdd_datatype);
+
+
+ALTER TABLE public.mdd_class OWNER TO postgres;
+
+--
+-- Name: TABLE mdd_class; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE mdd_class IS 'Классы';
+
+
+--
+-- Name: mdd_class_extention; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE mdd_class_extention (
+    class_id bigint NOT NULL,
+    base_class_id bigint NOT NULL
+);
+
+
+ALTER TABLE public.mdd_class_extention OWNER TO postgres;
+
+--
+-- Name: TABLE mdd_class_extention; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE mdd_class_extention IS 'Наследование классов';
+
+
+--
+-- Name: mdd_class_sq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE mdd_class_sq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.mdd_class_sq OWNER TO postgres;
+
+--
+-- Name: mdd_datatype_sized; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE mdd_datatype_sized (
+    datasize bigint
+)
+INHERITS (mdd_datatype);
+
+
+ALTER TABLE public.mdd_datatype_sized OWNER TO postgres;
+
+--
+-- Name: mdd_datatype_sq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE mdd_datatype_sq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.mdd_datatype_sq OWNER TO postgres;
+
+--
+-- Name: person; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE person (
+    id integer NOT NULL,
+    citizenship_country_id integer,
+    language_id integer,
+    person_kind_id smallint
+);
+
+
+ALTER TABLE public.person OWNER TO postgres;
+
+--
+-- Name: TABLE person; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE person IS 'физ. и юр.лица';
+
+
+--
+-- Name: COLUMN person.citizenship_country_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person.citizenship_country_id IS 'гражданство, национальная принадлежность, подданство';
+
+
+--
+-- Name: COLUMN person.language_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person.language_id IS 'родной (основной) язык для общения';
+
+
+--
+-- Name: COLUMN person.person_kind_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person.person_kind_id IS 'тип персоны';
+
+
+--
+-- Name: person_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE person_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.person_id_seq OWNER TO postgres;
+
+--
+-- Name: person_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE person_id_seq OWNED BY person.id;
+
+
+--
+-- Name: person_individual; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE person_individual (
+    person_id integer NOT NULL,
+    last_name character varying(255),
+    middle_name character varying(255),
+    first_name character varying(255),
+    birthdate date
+);
+
+
+ALTER TABLE public.person_individual OWNER TO postgres;
+
+--
+-- Name: TABLE person_individual; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE person_individual IS 'Физические лица';
+
+
+--
+-- Name: COLUMN person_individual.last_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person_individual.last_name IS 'Фамилия';
+
+
+--
+-- Name: COLUMN person_individual.middle_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person_individual.middle_name IS 'Отчество';
+
+
+--
+-- Name: COLUMN person_individual.first_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person_individual.first_name IS 'Имя';
+
+
+--
+-- Name: COLUMN person_individual.birthdate; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person_individual.birthdate IS 'Дата рождения';
+
+
+--
+-- Name: person_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE person_kind (
+    id integer NOT NULL,
+    name character varying(100) NOT NULL
+);
+
+
+ALTER TABLE public.person_kind OWNER TO postgres;
+
+--
+-- Name: person_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE person_kind_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.person_kind_id_seq OWNER TO postgres;
+
+--
+-- Name: person_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE person_kind_id_seq OWNED BY person_kind.id;
+
+
+--
+-- Name: person_legal; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE person_legal (
+    person_id integer NOT NULL,
+    name_short character varying(255),
+    name_long character varying(511)
+);
+
+
+ALTER TABLE public.person_legal OWNER TO postgres;
+
+--
+-- Name: COLUMN person_legal.name_short; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person_legal.name_short IS 'Краткое наименование';
+
+
+--
+-- Name: COLUMN person_legal.name_long; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN person_legal.name_long IS 'Полное наименование';
+
+
+--
+-- Name: sec_authentication_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE sec_authentication_kind_id_seq
+    START WITH 2
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sec_authentication_kind_id_seq OWNER TO postgres;
+
+--
+-- Name: sec_authentication_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_authentication_kind (
+    id integer DEFAULT nextval('sec_authentication_kind_id_seq'::regclass) NOT NULL,
+    name character varying(255) NOT NULL,
+    code character varying(25)
+);
+
+
+ALTER TABLE public.sec_authentication_kind OWNER TO postgres;
+
+--
+-- Name: TABLE sec_authentication_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_authentication_kind IS 'схемы, виды аутентификации';
+
+
+--
+-- Name: sec_authentication_path; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_authentication_path (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    authentication_kind_id integer NOT NULL,
+    credential_kind character varying(50),
+    application_id integer
+);
+
+
+ALTER TABLE public.sec_authentication_path OWNER TO postgres;
+
+--
+-- Name: TABLE sec_authentication_path; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE sec_authentication_path IS 'методы, способы и источники проверки аутентификации';
+
+
+--
+-- Name: COLUMN sec_authentication_path.application_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_authentication_path.application_id IS 'id приложения';
+
+
+--
+-- Name: sec_authentication_path_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE sec_authentication_path_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sec_authentication_path_id_seq OWNER TO postgres;
+
+--
+-- Name: sec_authentication_path_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE sec_authentication_path_id_seq OWNED BY sec_authentication_path.id;
+
+
+--
+-- Name: sec_event; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_event (
+    whenfired timestamp with time zone NOT NULL,
+    event_kind integer NOT NULL,
+    event_status integer NOT NULL,
+    session_id uuid NOT NULL
+);
+
+
+ALTER TABLE public.sec_event OWNER TO postgres;
+
+--
+-- Name: COLUMN sec_event.whenfired; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.whenfired IS 'дата/вермя начала события';
+
+
+--
+-- Name: COLUMN sec_event.event_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.event_kind IS 'тип события';
+
+
+--
+-- Name: COLUMN sec_event.event_status; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.event_status IS 'статус события';
+
+
+--
+-- Name: COLUMN sec_event.session_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event.session_id IS 'идентификатор сессии';
+
+
+--
+-- Name: sec_user_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE sec_user_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.sec_user_id_seq OWNER TO postgres;
+
+--
+-- Name: sec_user_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE sec_user_id_seq OWNED BY sec_user.id;
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_application ALTER COLUMN id SET DEFAULT nextval('env_application_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_class ALTER COLUMN id SET DEFAULT nextval('env_class_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_event_kind ALTER COLUMN id SET DEFAULT nextval('env_event_kind_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_event_status ALTER COLUMN id SET DEFAULT nextval('env_event_status_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_resource ALTER COLUMN id SET DEFAULT nextval('env_resource_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_resource_kind ALTER COLUMN id SET DEFAULT nextval('env_resource_kind_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY i18_country ALTER COLUMN id SET DEFAULT nextval('i18_country_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY i18_currency ALTER COLUMN id SET DEFAULT nextval('i18_currency_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY i18_language ALTER COLUMN id SET DEFAULT nextval('i18_language_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person ALTER COLUMN id SET DEFAULT nextval('person_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person_kind ALTER COLUMN id SET DEFAULT nextval('person_kind_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_authentication_path ALTER COLUMN id SET DEFAULT nextval('sec_authentication_path_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user ALTER COLUMN id SET DEFAULT nextval('sec_user_id_seq'::regclass);
+
+
+--
+-- Data for Name: env_application; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_application (id, code, name) FROM stdin;
+1	MDD	Master data dictionary
+2	test01	test application #1
+\.
+
+
+--
+-- Name: env_application_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_application_id_seq', 2, true);
+
+
+--
+-- Data for Name: env_application_relation; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_application_relation (id, related_to_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: env_class; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_class (id, name) FROM stdin;
+\.
+
+
+--
+-- Name: env_class_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_class_id_seq', 1, false);
+
+
+--
+-- Data for Name: env_event_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_event_kind (id, name, class_id) FROM stdin;
+\.
+
+
+--
+-- Name: env_event_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_event_kind_id_seq', 1, false);
+
+
+--
+-- Data for Name: env_event_status; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_event_status (id, name) FROM stdin;
+\.
+
+
+--
+-- Name: env_event_status_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_event_status_id_seq', 1, false);
+
+
+--
+-- Data for Name: env_resource; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_resource (id, resource_kind_id) FROM stdin;
+1	1
+2	1
+3	1
+4	1
+\.
+
+
+--
+-- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_resource_id_seq', 4, true);
+
+
+--
+-- Data for Name: env_resource_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_resource_kind (id, name) FROM stdin;
+1	текст
+2	изображение
+\.
+
+
+--
+-- Name: env_resource_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_resource_kind_id_seq', 2, true);
+
+
+--
+-- Data for Name: env_resource_text; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_resource_text (id, content, code) FROM stdin;
+1	resource id=%1$s not found (in env_resource_text). can not format resource text	RES00001
+2	resource id=%1$s not unique	RES00002
+3	user %s not found	SEC00001
+\.
+
+
+--
+-- Data for Name: i18_country; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY i18_country (id, name, number3code, alpha2code, alpha3code) FROM stdin;
+1	Afghanistan	4	AF	AFG
+2	Åland	248	AX	ALA
+3	Albania	8	AL	ALB
+4	Algeria	12	DZ	DZA
+5	American Samoa	16	AS	ASM
+6	Andorra	20	AD	AND
+7	Angola	24	AO	AGO
+8	Anguilla	660	AI	AIA
+9	Antarctica	10	AQ	ATA
+10	Antigua and Barbuda	28	AG	ATG
+11	Argentina	32	AR	ARG
+12	Armenia	51	AM	ARM
+13	Aruba	533	AW	ABW
+14	Australia	36	AU	AUS
+15	Austria	40	AT	AUT
+16	Azerbaijan	31	AZ	AZE
+17	Bahamas	44	BS	BHS
+18	Bahrain	48	BH	BHR
+19	Bangladesh	50	BD	BGD
+20	Barbados	52	BB	BRB
+21	Belarus	112	BY	BLR
+22	Belgium	56	BE	BEL
+23	Belize	84	BZ	BLZ
+24	Benin	204	BJ	BEN
+25	Bermuda	60	BM	BMU
+26	Bhutan	64	BT	BTN
+27	Bolivia	68	BO	BOL
+28	Bonaire, Sint Eustatiusand Saba	535	BQ	BES
+29	Bosnia and Herzegovina	70	BA	BIH
+30	Botswana	72	BW	BWA
+31	Bouvet Island	74	BV	BVT
+32	Brazil	76	BR	BRA
+33	British Indian OceanTerritory	86	IO	IOT
+34	Brunei Darussalam	96	BN	BRN
+35	Bulgaria	100	BG	BGR
+36	Burkina Faso	854	BF	BFA
+37	Burundi	108	BI	BDI
+38	Cambodia	116	KH	KHM
+39	Cameroon	120	CM	CMR
+40	Canada	124	CA	CAN
+41	Cape Verde	132	CV	CPV
+42	Cayman Islands	136	KY	CYM
+43	Central African Republic	140	CF	CAF
+44	Chad	148	TD	TCD
+45	Chile	152	CL	CHL
+46	China	156	CN	CHN
+47	Christmas Island	162	CX	CXR
+48	Cocos (Keeling) Islands	166	CC	CCK
+49	Colombia	170	CO	COL
+50	Comoros	174	KM	COM
+51	Congo (Brazzaville)	178	CG	COG
+52	Congo (Kinshasa)	180	CD	COD
+53	Cook Islands	184	CK	COK
+54	Costa Rica	188	CR	CRI
+55	Côte d`Ivoire	384	CI	CIV
+56	Croatia	191	HR	HRV
+57	Cuba	192	CU	CUB
+58	Curaçao	531	CW	CUW
+59	Cyprus	196	CY	CYP
+60	Czech Republic	203	CZ	CZE
+61	Denmark	208	DK	DNK
+62	Djibouti	262	DJ	DJI
+63	Dominica	212	DM	DMA
+64	Dominican Republic	214	DO	DOM
+65	Ecuador	218	EC	ECU
+66	Egypt	818	EG	EGY
+67	El Salvador	222	SV	SLV
+68	Equatorial Guinea	226	GQ	GNQ
+69	Eritrea	232	ER	ERI
+70	Estonia	233	EE	EST
+71	Ethiopia	231	ET	ETH
+72	Falkland Islands	238	FK	FLK
+73	Faroe Islands	234	FO	FRO
+74	Fiji	242	FJ	FJI
+75	Finland	246	FI	FIN
+76	France	250	FR	FRA
+77	French Guiana	254	GF	GUF
+78	French Polynesia	258	PF	PYF
+79	French Southern Lands	260	TF	ATF
+80	Gabon	266	GA	GAB
+81	Gambia	270	GM	GMB
+82	Georgia	268	GE	GEO
+83	Germany	276	DE	DEU
+84	Ghana	288	GH	GHA
+85	Gibraltar	292	GI	GIB
+86	Greece	300	GR	GRC
+87	Greenland	304	GL	GRL
+88	Grenada	308	GD	GRD
+89	Guadeloupe	312	GP	GLP
+90	Guam	316	GU	GUM
+91	Guatemala	320	GT	GTM
+92	Guernsey	831	GG	GGY
+93	Guinea	324	GN	GIN
+94	Guinea-Bissau	624	GW	GNB
+95	Guyana	328	GY	GUY
+96	Haiti	332	HT	HTI
+97	Heard and McDonald Islands	334	HM	HMD
+98	Honduras	340	HN	HND
+99	Hong Kong	344	HK	HKG
+100	Hungary	348	HU	HUN
+101	Iceland	352	IS	ISL
+102	India	356	IN	IND
+103	Indonesia	360	ID	IDN
+104	Iran	364	IR	IRN
+105	Iraq	368	IQ	IRQ
+106	Ireland	372	IE	IRL
+107	Isle of Man	833	IM	IMN
+108	Israel	376	IL	ISR
+109	Italy	380	IT	ITA
+110	Jamaica	388	JM	JAM
+111	Japan	392	JP	JPN
+112	Jersey	832	JE	JEY
+113	Jordan	400	JO	JOR
+114	Kazakhstan	398	KZ	KAZ
+115	Kenya	404	KE	KEN
+116	Kiribati	296	KI	KIR
+117	Korea, North	408	KP	PRK
+118	Korea, South	410	KR	KOR
+119	Kuwait	414	KW	KWT
+120	Kyrgyzstan	417	KG	KGZ
+121	Laos	418	LA	LAO
+122	Latvia	428	LV	LVA
+123	Lebanon	422	LB	LBN
+124	Lesotho	426	LS	LSO
+125	Liberia	430	LR	LBR
+126	Libya	434	LY	LBY
+127	Liechtenstein	438	LI	LIE
+128	Lithuania	440	LT	LTU
+129	Luxembourg	442	LU	LUX
+130	Macau	446	MO	MAC
+131	Macedonia	807	MK	MKD
+132	Madagascar	450	MG	MDG
+133	Malawi	454	MW	MWI
+134	Malaysia	458	MY	MYS
+135	Maldives	462	MV	MDV
+136	Mali	466	ML	MLI
+137	Malta	470	MT	MLT
+138	Marshall Islands	584	MH	MHL
+139	Martinique	474	MQ	MTQ
+140	Mauritania	478	MR	MRT
+141	Mauritius	480	MU	MUS
+142	Mayotte	175	YT	MYT
+143	Mexico	484	MX	MEX
+144	Micronesia	583	FM	FSM
+145	Moldova	498	MD	MDA
+146	Monaco	492	MC	MCO
+147	Mongolia	496	MN	MNG
+148	Montenegro	499	ME	MNE
+149	Montserrat	500	MS	MSR
+150	Morocco	504	MA	MAR
+151	Mozambique	508	MZ	MOZ
+152	Myanmar	104	MM	MMR
+153	Namibia	516	NA	NAM
+154	Nauru	520	NR	NRU
+155	Nepal	524	NP	NPL
+156	Netherlands	528	NL	NLD
+157	New Caledonia	540	NC	NCL
+158	New Zealand	554	NZ	NZL
+159	Nicaragua	558	NI	NIC
+160	Niger	562	NE	NER
+161	Nigeria	566	NG	NGA
+162	Niue	570	NU	NIU
+163	Norfolk Island	574	NF	NFK
+164	Northern Mariana Islands	580	MP	MNP
+165	Norway	578	NO	NOR
+166	Oman	512	OM	OMN
+167	Pakistan	586	PK	PAK
+168	Palau	585	PW	PLW
+169	Palestine	275	PS	PSE
+170	Panama	591	PA	PAN
+171	Papua New Guinea	598	PG	PNG
+172	Paraguay	600	PY	PRY
+173	Peru	604	PE	PER
+174	Philippines	608	PH	PHL
+175	Pitcairn	612	PN	PCN
+176	Poland	616	PL	POL
+177	Portugal	620	PT	PRT
+178	Puerto Rico	630	PR	PRI
+179	Qatar	634	QA	QAT
+180	Reunion	638	RE	REU
+181	Romania	642	RO	ROU
+182	Russian Federation	643	RU	RUS
+183	Rwanda	646	RW	RWA
+184	Saint Barthélemy	652	BL	BLM
+185	Saint Helena	654	SH	SHN
+186	Saint Kitts and Nevis	659	KN	KNA
+187	Saint Lucia	662	LC	LCA
+188	Saint Martin (French part)	663	MF	MAF
+189	Saint Pierre and Miquelon	666	PM	SPM
+190	Saint Vincent and theGrenadines	670	VC	VCT
+191	Samoa	882	WS	WSM
+192	San Marino	674	SM	SMR
+193	Sao Tome and Principe	678	ST	STP
+194	Saudi Arabia	682	SA	SAU
+195	Senegal	686	SN	SEN
+196	Serbia	688	RS	SRB
+197	Seychelles	690	SC	SYC
+198	Sierra Leone	694	SL	SLE
+199	Singapore	702	SG	SGP
+200	Sint Maarten	534	SX	SXM
+201	Slovakia	703	SK	SVK
+202	Slovenia	705	SI	SVN
+203	Solomon Islands	90	SB	SLB
+204	Somalia	706	SO	SOM
+205	South Africa	710	ZA	ZAF
+206	South Georgia and SouthSandwich Islands	239	GS	SGS
+207	South Sudan	728	SS	SSD
+208	Spain	724	ES	ESP
+209	Sri Lanka	144	LK	LKA
+210	Sudan	729	SD	SDN
+211	Suriname	740	SR	SUR
+212	Svalbard and Jan MayenIslands	744	SJ	SJM
+213	Swaziland	748	SZ	SWZ
+214	Sweden	752	SE	SWE
+215	Switzerland	756	CH	CHE
+216	Syria	760	SY	SYR
+217	Taiwan	158	TW	TWN
+218	Tajikistan	762	TJ	TJK
+219	Tanzania	834	TZ	TZA
+220	Thailand	764	TH	THA
+221	Timor-Leste	626	TL	TLS
+222	Togo	768	TG	TGO
+223	Tokelau	772	TK	TKL
+224	Tonga	776	TO	TON
+225	Trinidad and Tobago	780	TT	TTO
+226	Tunisia	788	TN	TUN
+227	Turkey	792	TR	TUR
+228	Turkmenistan	795	TM	TKM
+229	Turks and Caicos Islands	796	TC	TCA
+230	Tuvalu	798	TV	TUV
+231	Uganda	800	UG	UGA
+232	Ukraine	804	UA	UKR
+233	United Arab Emirates	784	AE	ARE
+234	United Kingdom	826	GB	GBR
+235	United States MinorOutlying Islands	581	UM	UMI
+236	United States of America	840	US	USA
+237	Uruguay	858	UY	URY
+238	Uzbekistan	860	UZ	UZB
+239	Vanuatu	548	VU	VUT
+240	Vatican City	336	VA	VAT
+241	Venezuela	862	VE	VEN
+242	Vietnam	704	VN	VNM
+243	Virgin Islands, British	92	VG	VGB
+244	Virgin Islands, U.S.	850	VI	VIR
+245	Wallis and Futuna Islands	876	WF	WLF
+246	Western Sahara	732	EH	ESH
+247	Yemen	887	YE	YEM
+248	Zambia	894	ZM	ZMB
+249	Zimbabwe	716	ZW	ZWE
+\.
+
+
+--
+-- Data for Name: i18_country_depend; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY i18_country_depend (number3code, dependent_text) FROM stdin;
+248	Part of FI                                        
+16	Territory of US                                   
+660	Territory of GB                                   
+10	International                                     
+533	Part of NL                                        
+60	Territory of GB                                   
+535	Part of NL                                        
+74	Territory of NO                                   
+86	Territory of GB                                   
+136	Territory of GB                                   
+162	Territory of AU                                   
+166	Territory of AU                                   
+184	Associated with NZ                                
+531	Part of NL                                        
+238	Territory of GB                                   
+234	Part of DK                                        
+254	Part of FR                                        
+258	Territory of FR                                   
+260	Territory of FR                                   
+292	Territory of GB                                   
+304	Part of DK                                        
+312	Part of FR                                        
+316	Territory of US                                   
+831	Crown dependency of GB                            
+334	Territory of AU                                   
+344	Part of CN                                        
+833	Crown dependency of GB                            
+832	Crown dependency of GB                            
+446	Part of CN                                        
+474	Part of FR                                        
+175	Part of FR                                        
+500	Territory of GB                                   
+540	Territory of FR                                   
+570	Associated with NZ                                
+574	Territory of AU                                   
+580	Commonwealth of US                                
+275	In contention                                     
+612	Territory of GB                                   
+630	Commonwealth of US                                
+638	Part of FR                                        
+652	Part of FR                                        
+654	Territory of GB                                   
+663	Part of FR                                        
+666	Part of FR                                        
+534	Part of NL                                        
+239	Territory of GB                                   
+744	Territory of NO                                   
+772	Territory of NZ                                   
+796	Territory of GB                                   
+581	Territories of US                                 
+92	Territory of GB                                   
+850	Territory of US                                   
+876	Territory of FR                                   
+732	In contention                                     
+\.
+
+
+--
+-- Name: i18_country_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('i18_country_id_seq', 249, true);
+
+
+--
+-- Data for Name: i18_country_phoneprefix; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY i18_country_phoneprefix (number3code, prefix) FROM stdin;
+4	93   
+248	358  
+8	355  
+12	213  
+16	1-684
+20	376  
+24	244  
+660	1-264
+10	672  
+28	1-268
+32	54   
+51	374  
+533	297  
+36	61   
+40	43   
+31	994  
+44	1-242
+48	973  
+50	880  
+52	1-246
+112	375  
+56	32   
+84	501  
+204	229  
+60	1-441
+64	975  
+68	591  
+535	599  
+70	387  
+72	267  
+74	47   
+76	55   
+86	246  
+96	673  
+100	359  
+854	226  
+108	257  
+116	855  
+120	237  
+124	1    
+132	238  
+136	1-345
+140	236  
+148	235  
+152	56   
+156	86   
+162	61   
+166	61   
+170	57   
+174	269  
+178	242  
+180	243  
+184	682  
+188	506  
+384	225  
+191	385  
+192	53   
+531	599  
+196	357  
+203	420  
+208	45   
+262	253  
+212	1-767
+214	1-809
+214	1-829
+214	1-849
+218	593  
+818	20   
+222	503  
+226	240  
+232	291  
+233	372  
+231	251  
+238	500  
+234	298  
+242	679  
+246	358  
+250	33   
+254	594  
+258	689  
+260	262  
+266	241  
+270	220  
+268	995  
+276	49   
+288	233  
+292	350  
+300	30   
+304	299  
+308	1-473
+312	590  
+316	1-671
+320	502  
+831	44   
+324	224  
+624	245  
+328	592  
+332	509  
+334	672  
+340	504  
+344	852  
+348	36   
+352	354  
+356	91   
+360	62   
+364	98   
+368	964  
+372	353  
+833	44   
+376	972  
+380	39   
+388	1-876
+392	81   
+832	44   
+400	962  
+398	7    
+404	254  
+296	686  
+408	850  
+410	82   
+414	965  
+417	996  
+418	856  
+428	371  
+422	961  
+426	266  
+430	231  
+434	218  
+438	423  
+440	370  
+442	352  
+446	853  
+807	389  
+450	261  
+454	265  
+458	60   
+462	960  
+466	223  
+470	356  
+584	692  
+474	596  
+478	222  
+480	230  
+175	262  
+484	52   
+583	691  
+498	373  
+492	377  
+496	976  
+499	382  
+500	1-664
+504	212  
+508	258  
+104	95   
+516	264  
+520	674  
+524	977  
+528	31   
+540	687  
+554	64   
+558	505  
+562	227  
+566	234  
+570	683  
+574	672  
+580	1-670
+578	47   
+512	968  
+586	92   
+585	680  
+275	970  
+591	507  
+598	675  
+600	595  
+604	51   
+608	63   
+612	870  
+616	48   
+620	351  
+630	1    
+634	974  
+638	262  
+642	40   
+643	7    
+646	250  
+652	590  
+654	290  
+659	1-869
+662	1-758
+663	590  
+666	508  
+670	1-784
+882	685  
+674	378  
+678	239  
+682	966  
+686	221  
+688	381 p
+690	248  
+694	232  
+702	65   
+534	1-721
+703	421  
+705	386  
+90	677  
+706	252  
+710	27   
+239	500  
+728	211  
+724	34   
+144	94   
+729	249  
+740	597  
+744	47   
+748	268  
+752	46   
+756	41   
+760	963  
+158	886  
+762	992  
+834	255  
+764	66   
+626	670  
+768	228  
+772	690  
+776	676  
+780	1-868
+788	216  
+792	90   
+795	993  
+796	1-649
+798	688  
+800	256  
+804	380  
+784	971  
+826	44   
+840	1    
+858	598  
+860	998  
+548	678  
+336	39-06
+862	58   
+704	84   
+92	1-284
+850	1-340
+876	681  
+732	212  
+887	967  
+894	260  
+716	263  
+\.
+
+
+--
+-- Data for Name: i18_currency; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY i18_currency (id, name, alpha3code, numeric3code, minor_unit, is_fund) FROM stdin;
+1	UAE Dirham	AED	784	2	f
+2	Afghani	AFN	971	2	f
+3	Lek	ALL	8	2	f
+4	Armenian Dram	AMD	51	2	f
+5	Netherlands Antillean Guilder	ANG	532	2	f
+6	Kwanza	AOA	973	2	f
+7	Argentine Peso	ARS	32	2	f
+8	Australian Dollar	AUD	36	2	f
+9	Aruban Florin	AWG	533	2	f
+10	Azerbaijanian Manat	AZN	944	2	f
+11	Convertible Mark	BAM	977	2	f
+12	Barbados Dollar	BBD	52	2	f
+13	Taka	BDT	50	2	f
+14	Bulgarian Lev	BGN	975	2	f
+15	Bahraini Dinar	BHD	48	3	f
+16	Burundi Franc	BIF	108	0	f
+17	Bermudian Dollar	BMD	60	2	f
+18	Brunei Dollar	BND	96	2	f
+19	Boliviano	BOB	68	2	f
+20	Mvdol	BOV	984	2	t
+21	Brazilian Real	BRL	986	2	f
+22	Bahamian Dollar	BSD	44	2	f
+23	Ngultrum	BTN	64	2	f
+24	Pula	BWP	72	2	f
+25	Belarussian Ruble	BYR	974	0	f
+26	Belize Dollar	BZD	84	2	f
+27	Canadian Dollar	CAD	124	2	f
+28	Congolese Franc	CDF	976	2	f
+29	WIR Euro	CHE	947	2	t
+30	Swiss Franc	CHF	756	2	f
+31	WIR Franc	CHW	948	2	t
+32	Unidad de Fomento	CLF	990	4	t
+33	Chilean Peso	CLP	152	0	f
+34	Yuan Renminbi	CNY	156	2	f
+35	Colombian Peso	COP	170	2	f
+36	Unidad de Valor Real	COU	970	2	t
+37	Costa Rican Colon	CRC	188	2	f
+38	Peso Convertible	CUC	931	2	f
+39	Cuban Peso	CUP	192	2	f
+40	Cabo Verde Escudo	CVE	132	2	f
+41	Czech Koruna	CZK	203	2	f
+42	Djibouti Franc	DJF	262	0	f
+43	Danish Krone	DKK	208	2	f
+44	Dominican Peso	DOP	214	2	f
+45	Algerian Dinar	DZD	12	2	f
+46	Egyptian Pound	EGP	818	2	f
+47	Nakfa	ERN	232	2	f
+48	Ethiopian Birr	ETB	230	2	f
+49	Euro	EUR	978	2	f
+50	Fiji Dollar	FJD	242	2	f
+51	Falkland Islands Pound	FKP	238	2	f
+52	Pound Sterling	GBP	826	2	f
+53	Lari	GEL	981	2	f
+54	Ghana Cedi	GHS	936	2	f
+55	Gibraltar Pound	GIP	292	2	f
+56	Dalasi	GMD	270	2	f
+57	Guinea Franc	GNF	324	0	f
+58	Quetzal	GTQ	320	2	f
+59	Guyana Dollar	GYD	328	2	f
+60	Hong Kong Dollar	HKD	344	2	f
+61	Lempira	HNL	340	2	f
+62	Kuna	HRK	191	2	f
+63	Gourde	HTG	332	2	f
+64	Forint	HUF	348	2	f
+65	Rupiah	IDR	360	2	f
+66	New Israeli Sheqel	ILS	376	2	f
+67	Indian Rupee	INR	356	2	f
+68	Iraqi Dinar	IQD	368	3	f
+69	Iranian Rial	IRR	364	2	f
+70	Iceland Krona	ISK	352	0	f
+71	Jamaican Dollar	JMD	388	2	f
+72	Jordanian Dinar	JOD	400	3	f
+73	Yen	JPY	392	0	f
+74	Kenyan Shilling	KES	404	2	f
+75	Som	KGS	417	2	f
+76	Riel	KHR	116	2	f
+77	Comoro Franc	KMF	174	0	f
+78	North Korean Won	KPW	408	2	f
+79	Won	KRW	410	0	f
+80	Kuwaiti Dinar	KWD	414	3	f
+81	Cayman Islands Dollar	KYD	136	2	f
+82	Tenge	KZT	398	2	f
+83	Kip	LAK	418	2	f
+84	Lebanese Pound	LBP	422	2	f
+85	Sri Lanka Rupee	LKR	144	2	f
+86	Liberian Dollar	LRD	430	2	f
+87	Loti	LSL	426	2	f
+88	Libyan Dinar	LYD	434	3	f
+89	Moroccan Dirham	MAD	504	2	f
+90	Moldovan Leu	MDL	498	2	f
+91	Malagasy Ariary	MGA	969	2	f
+92	Denar	MKD	807	2	f
+93	Kyat	MMK	104	2	f
+94	Tugrik	MNT	496	2	f
+95	Pataca	MOP	446	2	f
+96	Ouguiya	MRO	478	2	f
+97	Mauritius Rupee	MUR	480	2	f
+98	Rufiyaa	MVR	462	2	f
+99	Kwacha	MWK	454	2	f
+100	Mexican Peso	MXN	484	2	f
+101	Mexican Unidad de Inversion (UDI)	MXV	979	2	t
+102	Malaysian Ringgit	MYR	458	2	f
+103	Mozambique Metical	MZN	943	2	f
+104	Namibia Dollar	NAD	516	2	f
+105	Naira	NGN	566	2	f
+106	Cordoba Oro	NIO	558	2	f
+107	Norwegian Krone	NOK	578	2	f
+108	Nepalese Rupee	NPR	524	2	f
+109	New Zealand Dollar	NZD	554	2	f
+110	Rial Omani	OMR	512	3	f
+111	Balboa	PAB	590	2	f
+112	Nuevo Sol	PEN	604	2	f
+113	Kina	PGK	598	2	f
+114	Philippine Peso	PHP	608	2	f
+115	Pakistan Rupee	PKR	586	2	f
+116	Zloty	PLN	985	2	f
+117	Guarani	PYG	600	0	f
+118	Qatari Rial	QAR	634	2	f
+119	Romanian Leu	RON	946	2	f
+120	Serbian Dinar	RSD	941	2	f
+121	Russian Ruble	RUB	643	2	f
+122	Rwanda Franc	RWF	646	0	f
+123	Saudi Riyal	SAR	682	2	f
+124	Solomon Islands Dollar	SBD	90	2	f
+125	Seychelles Rupee	SCR	690	2	f
+126	Sudanese Pound	SDG	938	2	f
+127	Swedish Krona	SEK	752	2	f
+128	Singapore Dollar	SGD	702	2	f
+129	Saint Helena Pound	SHP	654	2	f
+130	Leone	SLL	694	2	f
+131	Somali Shilling	SOS	706	2	f
+132	Surinam Dollar	SRD	968	2	f
+133	South Sudanese Pound	SSP	728	2	f
+134	Dobra	STD	678	2	f
+135	El Salvador Colon	SVC	222	2	f
+136	Syrian Pound	SYP	760	2	f
+137	Lilangeni	SZL	748	2	f
+138	Baht	THB	764	2	f
+139	Somoni	TJS	972	2	f
+140	Turkmenistan New Manat	TMT	934	2	f
+141	Tunisian Dinar	TND	788	3	f
+142	Pa’anga	TOP	776	2	f
+143	Turkish Lira	TRY	949	2	f
+144	Trinidad and Tobago Dollar	TTD	780	2	f
+145	New Taiwan Dollar	TWD	901	2	f
+146	Tanzanian Shilling	TZS	834	2	f
+147	Hryvnia	UAH	980	2	f
+148	Uganda Shilling	UGX	800	0	f
+149	US Dollar	USD	840	2	f
+150	US Dollar (Next day)	USN	997	2	t
+151	Uruguay Peso en Unidades Indexadas (URUIURUI)	UYI	940	0	t
+152	Peso Uruguayo	UYU	858	2	f
+153	Uzbekistan Sum	UZS	860	2	f
+154	Bolivar	VEF	937	2	f
+155	Dong	VND	704	0	f
+156	Vatu	VUV	548	0	f
+157	Tala	WST	882	2	f
+158	CFA Franc BEAC	XAF	950	0	f
+159	Silver	XAG	961	\N	f
+160	Gold	XAU	959	\N	f
+161	Bond Markets Unit European Composite Unit (EURCO)	XBA	955	\N	f
+162	Bond Markets Unit European Monetary Unit (E.M.U.-6)	XBB	956	\N	f
+163	Bond Markets Unit European Unit of Account 9 (E.U.A.-9)	XBC	957	\N	f
+164	Bond Markets Unit European Unit of Account 17 (E.U.A.-17)	XBD	958	\N	f
+165	East Caribbean Dollar	XCD	951	2	f
+166	SDR (Special Drawing Right)	XDR	960	\N	f
+167	CFA Franc BCEAO	XOF	952	0	f
+168	Palladium	XPD	964	\N	f
+169	CFP Franc	XPF	953	0	f
+170	Platinum	XPT	962	\N	f
+171	Sucre	XSU	994	\N	f
+172	Codes specifically reserved for testing purposes	XTS	963	\N	f
+173	ADB Unit of Account	XUA	965	\N	f
+174	The codes assigned for transactions where no currency is involved	XXX	999	\N	f
+175	Yemeni Rial	YER	886	2	f
+176	Rand	ZAR	710	2	f
+177	Zambian Kwacha	ZMW	967	2	f
+178	Zimbabwe Dollar	ZWL	932	2	f
+\.
+
+
+--
+-- Data for Name: i18_currency_country; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY i18_currency_country (alpha3code, entity) FROM stdin;
+AFN	AFGHANISTAN
+EUR	ÅLAND ISLANDS
+ALL	ALBANIA
+DZD	ALGERIA
+USD	AMERICAN SAMOA
+EUR	ANDORRA
+AOA	ANGOLA
+XCD	ANGUILLA
+XCD	ANTIGUA AND BARBUDA
+ARS	ARGENTINA
+AMD	ARMENIA
+AWG	ARUBA
+AUD	AUSTRALIA
+EUR	AUSTRIA
+AZN	AZERBAIJAN
+BSD	BAHAMAS (THE)
+BHD	BAHRAIN
+BDT	BANGLADESH
+BBD	BARBADOS
+BYR	BELARUS
+EUR	BELGIUM
+BZD	BELIZE
+XOF	BENIN
+BMD	BERMUDA
+BTN	BHUTAN
+INR	BHUTAN
+BOB	BOLIVIA (PLURINATIONAL STATE OF)
+BOV	BOLIVIA (PLURINATIONAL STATE OF)
+USD	BONAIRE, SINT EUSTATIUS AND SABA
+BAM	BOSNIA AND HERZEGOVINA
+BWP	BOTSWANA
+NOK	BOUVET ISLAND
+BRL	BRAZIL
+USD	BRITISH INDIAN OCEAN TERRITORY (THE)
+BND	BRUNEI DARUSSALAM
+BGN	BULGARIA
+XOF	BURKINA FASO
+BIF	BURUNDI
+CVE	CABO VERDE
+KHR	CAMBODIA
+XAF	CAMEROON
+CAD	CANADA
+KYD	CAYMAN ISLANDS (THE)
+XAF	CENTRAL AFRICAN REPUBLIC (THE)
+XAF	CHAD
+CLF	CHILE
+CLP	CHILE
+CNY	CHINA
+AUD	CHRISTMAS ISLAND
+AUD	COCOS (KEELING) ISLANDS (THE)
+COP	COLOMBIA
+COU	COLOMBIA
+KMF	COMOROS (THE)
+CDF	CONGO (THE DEMOCRATIC REPUBLIC OF THE)
+XAF	CONGO (THE)
+NZD	COOK ISLANDS (THE)
+CRC	COSTA RICA
+XOF	CÔTE D`IVOIRE
+HRK	CROATIA
+CUC	CUBA
+CUP	CUBA
+ANG	CURAÇAO
+EUR	CYPRUS
+CZK	CZECH REPUBLIC (THE)
+DKK	DENMARK
+DJF	DJIBOUTI
+XCD	DOMINICA
+DOP	DOMINICAN REPUBLIC (THE)
+USD	ECUADOR
+EGP	EGYPT
+SVC	EL SALVADOR
+USD	EL SALVADOR
+XAF	EQUATORIAL GUINEA
+ERN	ERITREA
+EUR	ESTONIA
+ETB	ETHIOPIA
+EUR	EUROPEAN UNION
+FKP	FALKLAND ISLANDS (THE) [MALVINAS]
+DKK	FAROE ISLANDS (THE)
+FJD	FIJI
+EUR	FINLAND
+EUR	FRANCE
+EUR	FRENCH GUIANA
+XPF	FRENCH POLYNESIA
+EUR	FRENCH SOUTHERN TERRITORIES (THE)
+XAF	GABON
+GMD	GAMBIA (THE)
+GEL	GEORGIA
+EUR	GERMANY
+GHS	GHANA
+GIP	GIBRALTAR
+EUR	GREECE
+DKK	GREENLAND
+XCD	GRENADA
+EUR	GUADELOUPE
+USD	GUAM
+GTQ	GUATEMALA
+GBP	GUERNSEY
+GNF	GUINEA
+XOF	GUINEA-BISSAU
+GYD	GUYANA
+HTG	HAITI
+USD	HAITI
+AUD	HEARD ISLAND AND McDONALD ISLANDS
+EUR	HOLY SEE (THE)
+HNL	HONDURAS
+HKD	HONG KONG
+HUF	HUNGARY
+ISK	ICELAND
+INR	INDIA
+IDR	INDONESIA
+XDR	INTERNATIONAL MONETARY FUND (IMF) 
+IRR	IRAN (ISLAMIC REPUBLIC OF)
+IQD	IRAQ
+EUR	IRELAND
+GBP	ISLE OF MAN
+ILS	ISRAEL
+EUR	ITALY
+JMD	JAMAICA
+JPY	JAPAN
+GBP	JERSEY
+JOD	JORDAN
+KZT	KAZAKHSTAN
+KES	KENYA
+AUD	KIRIBATI
+KPW	KOREA (THE DEMOCRATIC PEOPLE’S REPUBLIC OF)
+KRW	KOREA (THE REPUBLIC OF)
+KWD	KUWAIT
+KGS	KYRGYZSTAN
+LAK	LAO PEOPLE’S DEMOCRATIC REPUBLIC (THE)
+EUR	LATVIA
+LBP	LEBANON
+LSL	LESOTHO
+ZAR	LESOTHO
+LRD	LIBERIA
+LYD	LIBYA
+CHF	LIECHTENSTEIN
+EUR	LITHUANIA
+EUR	LUXEMBOURG
+MOP	MACAO
+MKD	MACEDONIA (THE FORMER YUGOSLAV REPUBLIC OF)
+MGA	MADAGASCAR
+MWK	MALAWI
+MYR	MALAYSIA
+MVR	MALDIVES
+XOF	MALI
+EUR	MALTA
+USD	MARSHALL ISLANDS (THE)
+EUR	MARTINIQUE
+MRO	MAURITANIA
+MUR	MAURITIUS
+EUR	MAYOTTE
+XUA	MEMBER COUNTRIES OF THE AFRICAN DEVELOPMENT BANK GROUP
+MXN	MEXICO
+MXV	MEXICO
+USD	MICRONESIA (FEDERATED STATES OF)
+MDL	MOLDOVA (THE REPUBLIC OF)
+EUR	MONACO
+MNT	MONGOLIA
+EUR	MONTENEGRO
+XCD	MONTSERRAT
+MAD	MOROCCO
+MZN	MOZAMBIQUE
+MMK	MYANMAR
+NAD	NAMIBIA
+ZAR	NAMIBIA
+AUD	NAURU
+NPR	NEPAL
+EUR	NETHERLANDS (THE)
+XPF	NEW CALEDONIA
+NZD	NEW ZEALAND
+NIO	NICARAGUA
+XOF	NIGER (THE)
+NGN	NIGERIA
+NZD	NIUE
+AUD	NORFOLK ISLAND
+USD	NORTHERN MARIANA ISLANDS (THE)
+NOK	NORWAY
+OMR	OMAN
+PKR	PAKISTAN
+USD	PALAU
+PAB	PANAMA
+USD	PANAMA
+PGK	PAPUA NEW GUINEA
+PYG	PARAGUAY
+PEN	PERU
+PHP	PHILIPPINES (THE)
+NZD	PITCAIRN
+PLN	POLAND
+EUR	PORTUGAL
+USD	PUERTO RICO
+QAR	QATAR
+EUR	RÉUNION
+RON	ROMANIA
+RUB	RUSSIAN FEDERATION (THE)
+RWF	RWANDA
+EUR	SAINT BARTHÉLEMY
+SHP	SAINT HELENA, ASCENSION AND TRISTAN DA CUNHA
+XCD	SAINT KITTS AND NEVIS
+XCD	SAINT LUCIA
+EUR	SAINT MARTIN (FRENCH PART)
+EUR	SAINT PIERRE AND MIQUELON
+XCD	SAINT VINCENT AND THE GRENADINES
+WST	SAMOA
+EUR	SAN MARINO
+STD	SAO TOME AND PRINCIPE
+SAR	SAUDI ARABIA
+XOF	SENEGAL
+RSD	SERBIA
+SCR	SEYCHELLES
+SLL	SIERRA LEONE
+SGD	SINGAPORE
+ANG	SINT MAARTEN (DUTCH PART)
+XSU	SISTEMA UNITARIO DE COMPENSACION REGIONAL DE PAGOS "SUCRE"
+EUR	SLOVAKIA
+EUR	SLOVENIA
+SBD	SOLOMON ISLANDS
+SOS	SOMALIA
+ZAR	SOUTH AFRICA
+SSP	SOUTH SUDAN
+EUR	SPAIN
+LKR	SRI LANKA
+SDG	SUDAN (THE)
+SRD	SURINAME
+NOK	SVALBARD AND JAN MAYEN
+SZL	SWAZILAND
+SEK	SWEDEN
+CHE	SWITZERLAND
+CHF	SWITZERLAND
+CHW	SWITZERLAND
+SYP	SYRIAN ARAB REPUBLIC
+TWD	TAIWAN (PROVINCE OF CHINA)
+TJS	TAJIKISTAN
+TZS	TANZANIA, UNITED REPUBLIC OF
+THB	THAILAND
+USD	TIMOR-LESTE
+XOF	TOGO
+NZD	TOKELAU
+TOP	TONGA
+TTD	TRINIDAD AND TOBAGO
+TND	TUNISIA
+TRY	TURKEY
+TMT	TURKMENISTAN
+USD	TURKS AND CAICOS ISLANDS (THE)
+AUD	TUVALU
+UGX	UGANDA
+UAH	UKRAINE
+AED	UNITED ARAB EMIRATES (THE)
+GBP	UNITED KINGDOM OF GREAT BRITAIN AND NORTHERN IRELAND (THE)
+USD	UNITED STATES MINOR OUTLYING ISLANDS (THE)
+USD	UNITED STATES OF AMERICA (THE)
+USN	UNITED STATES OF AMERICA (THE)
+UYI	URUGUAY
+UYU	URUGUAY
+UZS	UZBEKISTAN
+VUV	VANUATU
+VEF	VENEZUELA (BOLIVARIAN REPUBLIC OF)
+VND	VIET NAM
+USD	VIRGIN ISLANDS (BRITISH)
+USD	VIRGIN ISLANDS (U.S.)
+XPF	WALLIS AND FUTUNA
+MAD	WESTERN SAHARA
+YER	YEMEN
+ZMW	ZAMBIA
+ZWL	ZIMBABWE
+XBA	ZZ01_Bond Markets Unit European_EURCO
+XBB	ZZ02_Bond Markets Unit European_EMU-6
+XBC	ZZ03_Bond Markets Unit European_EUA-9
+XBD	ZZ04_Bond Markets Unit European_EUA-17
+XTS	ZZ06_Testing_Code
+XXX	ZZ07_No_Currency
+XAU	ZZ08_Gold
+XPD	ZZ09_Palladium
+XPT	ZZ10_Platinum
+XAG	ZZ11_Silver
+\.
+
+
+--
+-- Name: i18_currency_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('i18_currency_id_seq', 178, true);
+
+
+--
+-- Data for Name: i18_language; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY i18_language (id, name, alpha2code, alpha3code, scope) FROM stdin;
+11	Afar	aa	aar	1
+12	Abkhazian	ab	abk	1
+13	Afrikaans	af	afr	1
+14	Akan	ak	aka	2
+15	Amharic	am	amh	1
+16	Aragonese	an	arg	1
+17	Arabic	ar	ara	2
+18	Assamese	as	asm	1
+19	Avaric	av	ava	1
+20	Aymara	ay	aym	2
+21	Azerbaijani	az	aze	2
+22	Bashkir	ba	bak	1
+23	Belarusian	be	bel	1
+24	Bulgarian	bg	bul	1
+25	Bislama	bi	bis	1
+26	Bambara	bm	bam	1
+27	Bengali	bn	ben	1
+28	Tibetan	bo	bod	1
+29	Breton	br	bre	1
+30	Bosnian	bs	bos	1
+31	Catalan	ca	cat	1
+32	Chechen	ce	che	1
+33	Chamorro	ch	cha	1
+34	Corsican	co	cos	1
+35	Cree	cr	cre	2
+36	Czech	cs	ces	1
+37	Chuvash	cv	chv	1
+38	Welsh	cy	cym	1
+39	Danish	da	dan	1
+40	German	de	deu	1
+41	Dhivehi	dv	div	1
+42	Dzongkha	dz	dzo	1
+43	Ewe	ee	ewe	1
+44	Modern Greek (1453-)	el	ell	1
+45	English	en	eng	1
+46	Spanish	es	spa	1
+47	Estonian	et	est	2
+48	Basque	eu	eus	1
+49	Persian	fa	fas	2
+50	Fulah	ff	ful	2
+51	Finnish	fi	fin	1
+52	Fijian	fj	fij	1
+53	Faroese	fo	fao	1
+54	French	fr	fra	1
+55	Western Frisian	fy	fry	1
+56	Irish	ga	gle	1
+57	Scottish Gaelic	gd	gla	1
+58	Galician	gl	glg	1
+59	Guarani	gn	grn	2
+60	Gujarati	gu	guj	1
+61	Manx	gv	glv	1
+62	Hausa	ha	hau	1
+63	Hebrew	he	heb	1
+64	Hindi	hi	hin	1
+65	Hiri Motu	ho	hmo	1
+66	Croatian	hr	hrv	1
+67	Haitian	ht	hat	1
+68	Hungarian	hu	hun	1
+69	Armenian	hy	hye	1
+70	Herero	hz	her	1
+71	Indonesian	id	ind	1
+72	Igbo	ig	ibo	1
+73	Sichuan Yi	ii	iii	1
+74	Inupiaq	ik	ipk	2
+75	Icelandic	is	isl	1
+76	Italian	it	ita	1
+77	Inuktitut	iu	iku	2
+78	Japanese	ja	jpn	1
+79	Javanese	jv	jav	1
+80	Georgian	ka	kat	1
+81	Kongo	kg	kon	2
+82	Kikuyu	ki	kik	1
+83	Kuanyama	kj	kua	1
+84	Kazakh	kk	kaz	1
+85	Kalaallisut	kl	kal	1
+86	Central Khmer	km	khm	1
+87	Kannada	kn	kan	1
+88	Korean	ko	kor	1
+89	Kanuri	kr	kau	2
+90	Kashmiri	ks	kas	1
+91	Kurdish	ku	kur	2
+92	Komi	kv	kom	2
+93	Cornish	kw	cor	1
+94	Kirghiz	ky	kir	1
+95	Luxembourgish	lb	ltz	1
+96	Ganda	lg	lug	1
+97	Limburgan	li	lim	1
+98	Lingala	ln	lin	1
+99	Lao	lo	lao	1
+100	Lithuanian	lt	lit	1
+101	Luba-Katanga	lu	lub	1
+102	Latvian	lv	lav	2
+103	Malagasy	mg	mlg	2
+104	Marshallese	mh	mah	1
+105	Maori	mi	mri	1
+106	Macedonian	mk	mkd	1
+107	Malayalam	ml	mal	1
+108	Mongolian	mn	mon	2
+109	Marathi	mr	mar	1
+110	Malay (macrolanguage)	ms	msa	2
+111	Maltese	mt	mlt	1
+112	Burmese	my	mya	1
+113	Nauru	na	nau	1
+114	Norwegian Bokmål	nb	nob	1
+115	North Ndebele	nd	nde	1
+116	Nepali (macrolanguage)	ne	nep	2
+117	Ndonga	ng	ndo	1
+118	Dutch	nl	nld	1
+119	Norwegian Nynorsk	nn	nno	1
+120	Norwegian	no	nor	2
+121	South Ndebele	nr	nbl	1
+122	Navajo	nv	nav	1
+123	Nyanja	ny	nya	1
+124	Occitan (post 1500)	oc	oci	1
+125	Ojibwa	oj	oji	2
+126	Oromo	om	orm	2
+127	Oriya (macrolanguage)	or	ori	2
+128	Ossetian	os	oss	1
+129	Panjabi	pa	pan	1
+130	Polish	pl	pol	1
+131	Pushto	ps	pus	2
+132	Portuguese	pt	por	1
+133	Quechua	qu	que	2
+134	Romansh	rm	roh	1
+135	Rundi	rn	run	1
+136	Romanian	ro	ron	1
+137	Russian	ru	rus	1
+138	Kinyarwanda	rw	kin	1
+139	Sardinian	sc	srd	2
+140	Sindhi	sd	snd	1
+141	Northern Sami	se	sme	1
+142	Sango	sg	sag	1
+143	Sinhala	si	sin	1
+144	Slovak	sk	slk	1
+145	Slovenian	sl	slv	1
+146	Samoan	sm	smo	1
+147	Shona	sn	sna	1
+148	Somali	so	som	1
+149	Albanian	sq	sqi	2
+150	Serbian	sr	srp	1
+151	Swati	ss	ssw	1
+152	Southern Sotho	st	sot	1
+153	Sundanese	su	sun	1
+154	Swedish	sv	swe	1
+155	Swahili (macrolanguage)	sw	swa	2
+156	Tamil	ta	tam	1
+157	Telugu	te	tel	1
+158	Tajik	tg	tgk	1
+159	Thai	th	tha	1
+160	Tigrinya	ti	tir	1
+161	Turkmen	tk	tuk	1
+162	Tagalog	tl	tgl	1
+163	Tswana	tn	tsn	1
+164	Tonga (Tonga Islands)	to	ton	1
+165	Turkish	tr	tur	1
+166	Tsonga	ts	tso	1
+167	Tatar	tt	tat	1
+168	Twi	tw	twi	1
+169	Tahitian	ty	tah	1
+170	Uighur	ug	uig	1
+171	Ukrainian	uk	ukr	1
+172	Urdu	ur	urd	1
+173	Uzbek	uz	uzb	2
+174	Venda	ve	ven	1
+175	Vietnamese	vi	vie	1
+176	Walloon	wa	wln	1
+177	Wolof	wo	wol	1
+178	Xhosa	xh	xho	1
+179	Yiddish	yi	yid	2
+180	Yoruba	yo	yor	1
+181	Zhuang	za	zha	2
+182	Chinese	zh	zho	2
+183	Zulu	zu	zul	1
+\.
+
+
+--
+-- Name: i18_language_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('i18_language_id_seq', 183, true);
+
+
+--
+-- Data for Name: mdd_class; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY mdd_class (id, name) FROM stdin;
+1	test1
+2	test2
+3	test3
+4	test4
+5	test5
+6	test1-1
+7	test2-1
+8	test3-1
+9	test4-1
+10	test5-1
+11	test1-1-1
+12	test2-1-1
+13	test3-1-1
+14	test4-1-1
+15	test5-1-1
+17	test1-2
+18	test2-1
+19	test2-2
+20	test2-3
+\.
+
+
+--
+-- Data for Name: mdd_class_extention; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY mdd_class_extention (class_id, base_class_id) FROM stdin;
+6	1
+7	2
+8	3
+9	4
+10	5
+11	6
+12	7
+13	8
+14	9
+15	10
+17	1
+18	2
+19	2
+20	2
+\.
+
+
+--
+-- Name: mdd_class_sq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('mdd_class_sq', 20, true);
+
+
+--
+-- Data for Name: mdd_datatype; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY mdd_datatype (id, name) FROM stdin;
+\.
+
+
+--
+-- Data for Name: mdd_datatype_sized; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY mdd_datatype_sized (id, name, datasize) FROM stdin;
+\.
+
+
+--
+-- Name: mdd_datatype_sq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('mdd_datatype_sq', 1, false);
+
+
+--
+-- Data for Name: person; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY person (id, citizenship_country_id, language_id, person_kind_id) FROM stdin;
+1	182	137	1
+2	182	137	1
+3	182	137	1
+\.
+
+
+--
+-- Name: person_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('person_id_seq', 4, true);
+
+
+--
+-- Data for Name: person_individual; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY person_individual (person_id, last_name, middle_name, first_name, birthdate) FROM stdin;
+1	root	root	root	\N
+\.
+
+
+--
+-- Data for Name: person_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY person_kind (id, name) FROM stdin;
+0	не указано
+1	физическое лицо
+2	юридическое лицо
+\.
+
+
+--
+-- Name: person_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('person_kind_id_seq', 1, false);
+
+
+--
+-- Data for Name: person_legal; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY person_legal (person_id, name_short, name_long) FROM stdin;
+\.
+
+
+--
+-- Data for Name: sec_authentication_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_authentication_kind (id, name, code) FROM stdin;
+2	ldap	ldap
+1	pg_crypt	pg_crypt
+\.
+
+
+--
+-- Name: sec_authentication_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('sec_authentication_kind_id_seq', 2, false);
+
+
+--
+-- Data for Name: sec_authentication_path; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_authentication_path (id, name, authentication_kind_id, credential_kind, application_id) FROM stdin;
+1	Пароль	1	bf	\N
+\.
+
+
+--
+-- Name: sec_authentication_path_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('sec_authentication_path_id_seq', 2, true);
+
+
+--
+-- Data for Name: sec_event; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_event (whenfired, event_kind, event_status, session_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: sec_session; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_session (user_id, whenstarted, id, whenended, credential, auth_path_id) FROM stdin;
+1	2015-12-03 00:00:00+03	0d64f5e2-c558-b11f-9efd-a10c77d60de1	\N	---	1
+1	2015-12-03 23:29:42.324451+03	5daa1715-5028-18d7-c663-c49d11595913	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
+1	2015-12-03 23:23:01.995911+03	69fe54b6-bdd1-a72f-42d3-503a8a68584a	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
+1	2015-12-03 23:19:51.317474+03	b642c69e-9419-8661-f897-c0602dcdd5b9	\N	\N	1
+1	2015-12-03 23:47:48.062573+03	6b976b0d-f216-3515-18ec-cd5ae32b5596	\N	$2a$06$5/HskQ5fCdX7aRY5PHqgke6YIXd0LJG.8Ywn1hqg/4q7PhgspFty2	1
+\.
+
+
+--
+-- Data for Name: sec_user; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_user (id, person_id, name) FROM stdin;
+1	1	root
+\.
+
+
+--
+-- Data for Name: sec_user_authcred; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_user_authcred (user_id, auth_path_id, credential) FROM stdin;
+1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu
+\.
+
+
+--
+-- Name: sec_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('sec_user_id_seq', 8, true);
+
+
+--
+-- Name: mdd_class_extention_pk1; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY mdd_class_extention
+    ADD CONSTRAINT mdd_class_extention_pk1 PRIMARY KEY (class_id, base_class_id);
+
+
+--
+-- Name: mdd_class_pk1; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY mdd_class
+    ADD CONSTRAINT mdd_class_pk1 PRIMARY KEY (id);
+
+
+--
+-- Name: mdd_datatype_pk1; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY mdd_datatype
+    ADD CONSTRAINT mdd_datatype_pk1 PRIMARY KEY (id);
+
+
+--
+-- Name: mdd_datatype_sized_pk1; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY mdd_datatype_sized
+    ADD CONSTRAINT mdd_datatype_sized_pk1 PRIMARY KEY (id);
+
+
+--
+-- Name: pk_country01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_country
+    ADD CONSTRAINT pk_country01 PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_application01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_application
+    ADD CONSTRAINT pk_env_application01 PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_application_relation01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_application_relation
+    ADD CONSTRAINT pk_env_application_relation01 PRIMARY KEY (id, related_to_id);
+
+
+--
+-- Name: pk_env_class; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_class
+    ADD CONSTRAINT pk_env_class PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_event; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_event_kind
+    ADD CONSTRAINT pk_env_event PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_event_status; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_event_status
+    ADD CONSTRAINT pk_env_event_status PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_resource; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_resource
+    ADD CONSTRAINT pk_env_resource PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_resource_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_resource_kind
+    ADD CONSTRAINT pk_env_resource_kind PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_resource_text; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_resource_text
+    ADD CONSTRAINT pk_env_resource_text PRIMARY KEY (id);
+
+
+--
+-- Name: pk_i18_country_depend01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_country_depend
+    ADD CONSTRAINT pk_i18_country_depend01 PRIMARY KEY (number3code);
+
+
+--
+-- Name: pk_i18_country_phoneprefix01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_country_phoneprefix
+    ADD CONSTRAINT pk_i18_country_phoneprefix01 PRIMARY KEY (number3code, prefix);
+
+
+--
+-- Name: pk_i18_currency; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_currency
+    ADD CONSTRAINT pk_i18_currency PRIMARY KEY (id);
+
+
+--
+-- Name: pk_i18_currency_country; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_currency_country
+    ADD CONSTRAINT pk_i18_currency_country PRIMARY KEY (alpha3code, entity);
+
+
+--
+-- Name: pk_i18_language01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_language
+    ADD CONSTRAINT pk_i18_language01 PRIMARY KEY (id);
+
+
+--
+-- Name: pk_person01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY person
+    ADD CONSTRAINT pk_person01 PRIMARY KEY (id);
+
+
+--
+-- Name: pk_person_individual01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY person_individual
+    ADD CONSTRAINT pk_person_individual01 PRIMARY KEY (person_id);
+
+
+--
+-- Name: pk_person_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY person_kind
+    ADD CONSTRAINT pk_person_kind PRIMARY KEY (id);
+
+
+--
+-- Name: pk_person_legal01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY person_legal
+    ADD CONSTRAINT pk_person_legal01 PRIMARY KEY (person_id);
+
+
+--
+-- Name: pk_sec_authentication_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_authentication_kind
+    ADD CONSTRAINT pk_sec_authentication_kind PRIMARY KEY (id);
+
+
+--
+-- Name: pk_sec_authentication_path; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_authentication_path
+    ADD CONSTRAINT pk_sec_authentication_path PRIMARY KEY (id);
+
+
+--
+-- Name: pk_sec_events; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_event
+    ADD CONSTRAINT pk_sec_events PRIMARY KEY (session_id, whenfired, event_kind, event_status);
+
+
+--
+-- Name: pk_sec_session; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_session
+    ADD CONSTRAINT pk_sec_session PRIMARY KEY (id);
+
+
+--
+-- Name: pk_sec_user; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_user
+    ADD CONSTRAINT pk_sec_user PRIMARY KEY (id);
+
+
+--
+-- Name: pk_sec_user_authcred; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_user_authcred
+    ADD CONSTRAINT pk_sec_user_authcred PRIMARY KEY (user_id, auth_path_id);
+
+
+--
+-- Name: uk_env_application01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_application
+    ADD CONSTRAINT uk_env_application01 UNIQUE (code);
+
+
+--
+-- Name: uk_i18_country01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_country
+    ADD CONSTRAINT uk_i18_country01 UNIQUE (number3code);
+
+
+--
+-- Name: uk_i18_country02; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_country
+    ADD CONSTRAINT uk_i18_country02 UNIQUE (alpha2code);
+
+
+--
+-- Name: uk_i18_country03; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_country
+    ADD CONSTRAINT uk_i18_country03 UNIQUE (alpha3code);
+
+
+--
+-- Name: uk_i18_currency01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_currency
+    ADD CONSTRAINT uk_i18_currency01 UNIQUE (alpha3code);
+
+
+--
+-- Name: uk_i18_currency02; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_currency
+    ADD CONSTRAINT uk_i18_currency02 UNIQUE (numeric3code);
+
+
+--
+-- Name: uk_i18_language01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_language
+    ADD CONSTRAINT uk_i18_language01 UNIQUE (alpha2code);
+
+
+--
+-- Name: uk_i18_language02; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY i18_language
+    ADD CONSTRAINT uk_i18_language02 UNIQUE (alpha3code);
+
+
+--
+-- Name: fk_env_application_relation01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_application_relation
+    ADD CONSTRAINT fk_env_application_relation01 FOREIGN KEY (id) REFERENCES env_application(id);
+
+
+--
+-- Name: fk_env_application_relation02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_application_relation
+    ADD CONSTRAINT fk_env_application_relation02 FOREIGN KEY (related_to_id) REFERENCES env_application(id);
+
+
+--
+-- Name: fk_env_event_kind01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_event_kind
+    ADD CONSTRAINT fk_env_event_kind01 FOREIGN KEY (class_id) REFERENCES env_class(id);
+
+
+--
+-- Name: fk_env_resource01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_resource
+    ADD CONSTRAINT fk_env_resource01 FOREIGN KEY (resource_kind_id) REFERENCES env_resource_kind(id);
+
+
+--
+-- Name: fk_env_resource_text01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_resource_text
+    ADD CONSTRAINT fk_env_resource_text01 FOREIGN KEY (id) REFERENCES env_resource(id);
+
+
+--
+-- Name: fk_i18_country_depend01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY i18_country_depend
+    ADD CONSTRAINT fk_i18_country_depend01 FOREIGN KEY (number3code) REFERENCES i18_country(number3code);
+
+
+--
+-- Name: fk_i18_country_phoneprefix01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY i18_country_phoneprefix
+    ADD CONSTRAINT fk_i18_country_phoneprefix01 FOREIGN KEY (number3code) REFERENCES i18_country(number3code);
+
+
+--
+-- Name: fk_i18_currency_country01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY i18_currency_country
+    ADD CONSTRAINT fk_i18_currency_country01 FOREIGN KEY (alpha3code) REFERENCES i18_currency(alpha3code);
+
+
+--
+-- Name: fk_person01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person
+    ADD CONSTRAINT fk_person01 FOREIGN KEY (citizenship_country_id) REFERENCES i18_country(id);
+
+
+--
+-- Name: fk_person02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person
+    ADD CONSTRAINT fk_person02 FOREIGN KEY (language_id) REFERENCES i18_language(id);
+
+
+--
+-- Name: fk_person03; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person
+    ADD CONSTRAINT fk_person03 FOREIGN KEY (person_kind_id) REFERENCES person_kind(id);
+
+
+--
+-- Name: fk_person_individual01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person_individual
+    ADD CONSTRAINT fk_person_individual01 FOREIGN KEY (person_id) REFERENCES person(id);
+
+
+--
+-- Name: fk_person_legal01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY person_legal
+    ADD CONSTRAINT fk_person_legal01 FOREIGN KEY (person_id) REFERENCES person(id);
+
+
+--
+-- Name: fk_sec_authentication_path01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_authentication_path
+    ADD CONSTRAINT fk_sec_authentication_path01 FOREIGN KEY (authentication_kind_id) REFERENCES sec_authentication_kind(id);
+
+
+--
+-- Name: fk_sec_authentication_path02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_authentication_path
+    ADD CONSTRAINT fk_sec_authentication_path02 FOREIGN KEY (application_id) REFERENCES env_application(id);
+
+
+--
+-- Name: fk_sec_event01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_event
+    ADD CONSTRAINT fk_sec_event01 FOREIGN KEY (event_kind) REFERENCES env_event_kind(id);
+
+
+--
+-- Name: fk_sec_event02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_event
+    ADD CONSTRAINT fk_sec_event02 FOREIGN KEY (event_status) REFERENCES env_event_status(id);
+
+
+--
+-- Name: fk_sec_session01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_session
+    ADD CONSTRAINT fk_sec_session01 FOREIGN KEY (user_id) REFERENCES sec_user(id);
+
+
+--
+-- Name: fk_sec_session02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_session
+    ADD CONSTRAINT fk_sec_session02 FOREIGN KEY (auth_path_id) REFERENCES sec_authentication_path(id);
+
+
+--
+-- Name: fk_sec_user01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user
+    ADD CONSTRAINT fk_sec_user01 FOREIGN KEY (person_id) REFERENCES person(id);
+
+
+--
+-- Name: fk_sec_user_authcred01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user_authcred
+    ADD CONSTRAINT fk_sec_user_authcred01 FOREIGN KEY (user_id) REFERENCES sec_user(id);
+
+
+--
+-- Name: fk_sec_user_authcred02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY sec_user_authcred
+    ADD CONSTRAINT fk_sec_user_authcred02 FOREIGN KEY (auth_path_id) REFERENCES sec_authentication_path(id);
+
+
+--
+-- Name: public; Type: ACL; Schema: -; Owner: postgres
+--
+
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM postgres;
+GRANT ALL ON SCHEMA public TO postgres;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+--
+-- PostgreSQL database dump complete
+--
+
