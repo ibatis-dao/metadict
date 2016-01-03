@@ -1493,12 +1493,13 @@ COMMENT ON FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_e
 
 CREATE TABLE sec_token (
     id integer NOT NULL,
-    textvalue text NOT NULL,
+    localvalue text NOT NULL,
     credential text,
     auth_path_id integer,
     session_id integer NOT NULL,
     validfrom timestamp with time zone NOT NULL,
-    validtill timestamp with time zone
+    validtill timestamp with time zone,
+    originvalue text
 );
 
 
@@ -1519,10 +1520,10 @@ COMMENT ON COLUMN sec_token.id IS 'идентификатор токена';
 
 
 --
--- Name: COLUMN sec_token.textvalue; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN sec_token.localvalue; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN sec_token.textvalue IS 'значение токена';
+COMMENT ON COLUMN sec_token.localvalue IS 'локализованное (уникальное) значение токена';
 
 
 --
@@ -1561,6 +1562,13 @@ COMMENT ON COLUMN sec_token.validtill IS 'момент (включительно
 
 
 --
+-- Name: COLUMN sec_token.originvalue; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token.originvalue IS 'исходное оригинальное значение токена, полученное от источника аутентификации';
+
+
+--
 -- Name: sec_login(text, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1581,11 +1589,17 @@ begin
     insert into sec_session (id, user_id, whenstarted)
     values (default, l_user.id, clock_timestamp())
     returning * into l_session;
-    insert into sec_token(id, textvalue, credential, auth_path_id, session_id, validfrom, validtill)
-    values (default, p_tokenvalue, null, p_auth_path_id, l_session.id, clock_timestamp(), null)
+    insert into sec_session_log (id, user_id, whenstarted, when_logged)
+    values (l_session.id, l_session.user_id, l_session.whenstarted, clock_timestamp());
+    l_token.originvalue := p_tokenvalue;
+    l_token := sec_token_localvalue(l_token);
+    insert into sec_token(id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill)
+    values (l_token.id, p_tokenvalue, l_token.localvalue, null, p_auth_path_id, l_session.id, clock_timestamp(), null)
     returning * into l_token;
+    insert into sec_token_log (id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
+    values (l_token.id, l_token.originvalue, l_token.localvalue, l_token.credential, l_token.auth_path_id, l_token.session_id, l_token.validfrom, l_token.validtill, clock_timestamp());
     -- регистрируем событие логина
-    select * into l_event from sec_event_start(l_session.id, 'sec_session', 'login_succeded') ;
+    select * into l_event from sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
     -- возвращаем строку токена
     return l_token;
   else 
@@ -1628,11 +1642,17 @@ begin
     insert into sec_session (id, user_id, whenstarted)
     values (default, l_uac.user_id, clock_timestamp())
     returning * into l_session;
-    insert into sec_token(id, textvalue, credential, auth_path_id, session_id, validfrom, validtill)
-    values (default, uuid_generate(), l_uac.credential, l_uac.auth_path_id, l_session.id, clock_timestamp(), null)
+    insert into sec_session_log (id, user_id, whenstarted, when_logged)
+    values (l_session.id, l_session.user_id, l_session.whenstarted, clock_timestamp());
+    l_token.originvalue := uuid_generate();
+    l_token := sec_token_localvalue(l_token);
+    insert into sec_token(id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill)
+    values (l_token.id, l_token.originvalue, l_token.localvalue, l_uac.credential, p_auth_path_id, l_session.id, clock_timestamp(), null)
     returning * into l_token;
+    insert into sec_token_log (id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
+    values (l_token.id, l_token.originvalue, l_token.localvalue, l_token.credential, l_token.auth_path_id, l_token.session_id, l_token.validfrom, l_token.validtill, clock_timestamp());
     -- регистрируем событие логина
-    select sec_event_start(l_session.id, 'sec_session', 'login_succeded');
+    select sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
     -- возвращаем строку токена
     return l_token;
   else 
@@ -1657,29 +1677,28 @@ COMMENT ON FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_i
 
 
 --
--- Name: sec_logout(text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sec_logout(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_logout(p_tokenvalue text, p_auth_path_id integer) RETURNS sec_token
+CREATE FUNCTION sec_logout(p_tokenvalue text) RETURNS sec_token
     LANGUAGE plpgsql COST 10
     AS $$declare
   -- завершает сессию с указанным токеном. возвращает строку токена, если сессия завершена успешно. в противном случае возвращает null
   l_token    sec_token; -- токен
+  l_session  sec_session; -- сессия
 begin
   -- проверка действительности токена
-  select * into l_token from sec_token_valid(p_tokenvalue, p_auth_path_id);
+  select * into l_token from sec_token_valid(p_tokenvalue);
   if (found) then
     -- токен действителен, завершаем его
-    update sec_token
-       set validtill = clock_timestamp()
-     where id = l_token.id
-    returning * into l_token;
-    update sec_session 
-       set whenended = clock_timestamp()
-     where id = l_token.session_id;
+    l_token := sec_token_stale(l_token);
+    -- проверка действительности сессии
+    l_session := sec_session_valid(l_token.session_id);
+    -- сессия действительна, завершаем её
+    l_session := sec_session_stale(l_session);
     -- регистрируем событие логаута
-    perform sec_event_start(l_token.session_id, 'sec_session', 'logout_succeded');
-    -- возвращаем строку сессии
+    perform sec_event_start(l_token.session_id, 'sec_session', 'logout_succeded', xmlforest(l_token));
+    -- возвращаем строку токена
     return l_token;
   else 
     -- 'SEC00026', 'token "%s" not found'
@@ -1690,13 +1709,13 @@ end;
 $$;
 
 
-ALTER FUNCTION public.sec_logout(p_tokenvalue text, p_auth_path_id integer) OWNER TO postgres;
+ALTER FUNCTION public.sec_logout(p_tokenvalue text) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_logout(p_tokenvalue text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_logout(p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_logout(p_tokenvalue text, p_auth_path_id integer) IS 'завершает сессию с указанным токеном. возвращает строку токена, если сессия завершена успешно. в противном случае возвращает null';
+COMMENT ON FUNCTION sec_logout(p_tokenvalue text) IS 'завершает сессию с указанным токеном. возвращает строку токена, если сессия завершена успешно. в противном случае возвращает null';
 
 
 --
@@ -1862,6 +1881,60 @@ COMMENT ON FUNCTION sec_session_require_permission(p_session_id integer, p_permi
 
 
 --
+-- Name: sec_session_stale(sec_session, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_session_stale(p_session sec_session, p_force boolean DEFAULT false) RETURNS sec_session
+    LANGUAGE plpgsql COST 10
+    AS $$
+declare
+  -- устаревание сессии пользователей
+  now      timestamp with time zone;
+begin
+  -- если устаревание не принудительное, то проверяем сессию на валидность
+  if (not p_force) then
+    begin
+      select * into p_session from sec_session_valid(p_session.id);
+    exception
+      when NO_DATA_FOUND or TOO_MANY_ROWS then p_force := true; -- если сессия не валидна, старим её принудительно
+    end;
+  end if;
+  -- если сессия не валидна или если устаревание принудительное
+  if p_force then
+    -- текущее дата/время
+    now := clock_timestamp();
+    -- если сессия не была ограничена по времени действия, ограничим её текущим моментом
+    p_session.whenended := coalesce(p_session.whenended, now);
+    -- обновим журнал
+    update sec_session_log
+       set user_id = p_session.user_id, 
+           whenstarted = p_session.whenstarted, 
+           whenended = p_session.whenended,
+           when_logged = now
+     where id = p_session.id;
+    -- если в журнале не было этой сессии, добавим её туда
+    if (not found) then
+      insert into sec_session_log (id, user_id, whenstarted, whenended, when_logged)
+      values (p_session.id, p_session.user_id, p_session.whenstarted, p_session.whenended, now);
+    end if;
+    -- удалим токен из оперативной таблицы
+    delete from sec_session where id = p_session.id;
+  end if;
+  return p_session;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_session_stale(p_session sec_session, p_force boolean) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_session_stale(p_session sec_session, p_force boolean); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_session_stale(p_session sec_session, p_force boolean) IS 'устаревание сессии пользователей';
+
+
+--
 -- Name: sec_session_valid(integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1903,47 +1976,137 @@ COMMENT ON FUNCTION sec_session_valid(p_session_id integer) IS 'проверки
 
 
 --
--- Name: sec_token_find_by_value(text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sec_token_find_by_value(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_token_find_by_value(p_tokenvalue text, p_auth_path_id integer) RETURNS sec_token
+CREATE FUNCTION sec_token_find_by_value(p_tokenvalue text) RETURNS sec_token
     LANGUAGE plpgsql STABLE COST 5
     AS $_$declare
-  -- поиск токена по его текстовому содержимому и источнику его происхождения. возвращает строку токена, если такой найден.
+  -- поиск токена по его локальному (уникальному) текстовому содержимому. возвращает строку токена, если такой найден.
   -- если токен не найден, возбуждает исключение
   res  sec_token;
 begin
   select st.* 
     into strict res
     from sec_token st 
-   where st.textvalue = p_tokenvalue
-     and st.auth_path_id = p_auth_path_id;
+   where st.localvalue = p_tokenvalue;
+     --and clock_timestamp() between validfrom and validtill
   return res;
 exception
   when NO_DATA_FOUND then
-    -- 'SEC00027', 'token value "%1$s" not found for authentication path "%2$s"'
-    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00027', p_tokenvalue, p_auth_path_id);
+    -- 'SEC00027', 'token value "%1$s" not found'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00027', p_tokenvalue);
   when TOO_MANY_ROWS then
-    -- 'SEC00028', 'token value "%1$s" not unique for authentication path "%2$s"'
-    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00028', p_tokenvalue, p_auth_path_id);
+    -- 'SEC00028', 'token value "%1$s" not unique'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('SEC00028', p_tokenvalue);
 end;
 $_$;
 
 
-ALTER FUNCTION public.sec_token_find_by_value(p_tokenvalue text, p_auth_path_id integer) OWNER TO postgres;
+ALTER FUNCTION public.sec_token_find_by_value(p_tokenvalue text) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_token_find_by_value(p_tokenvalue text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_token_find_by_value(p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_token_find_by_value(p_tokenvalue text, p_auth_path_id integer) IS 'поиск токена по его текстовому содержимому и источнику его происхождения. возвращает строку токена, если такой найден. если токен не найден, возбуждает исключение';
+COMMENT ON FUNCTION sec_token_find_by_value(p_tokenvalue text) IS 'поиск токена по его локальному (уникальному) текстовому содержимому. возвращает строку токена, если такой найден. если токен не найден, возбуждает исключение';
 
 
 --
--- Name: sec_token_valid(text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sec_token_localvalue(sec_token); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_token_valid(p_tokenvalue text, p_auth_path_id integer) RETURNS sec_token
+CREATE FUNCTION sec_token_localvalue(p_token sec_token) RETURNS sec_token
+    LANGUAGE plpgsql COST 5
+    AS $_$declare
+  -- возвращает строку токена с заполненным локальным (уникальным) текстовым содержимым токена.
+begin
+  if (p_token.originvalue is not null) then
+    if (p_token.id is null) then
+      p_token.id = nextval('sec_token_id_seq');
+    end if;
+    p_token.localvalue := p_token.id || '#' || p_token.originvalue;
+    return p_token;
+  else
+    -- 'SEC00035', 'value "%2$s" of "%1$s" must be not null'
+    raise exception null_value_not_allowed using message = env_resource_text_format('SEC00035', 'token', 'originvalue');
+  end if;
+end;
+$_$;
+
+
+ALTER FUNCTION public.sec_token_localvalue(p_token sec_token) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_token_localvalue(p_token sec_token); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_token_localvalue(p_token sec_token) IS 'возвращает строку токена с заполненным локальным (уникальным) текстовым содержимым токена.';
+
+
+--
+-- Name: sec_token_stale(sec_token, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_token_stale(p_token sec_token, p_force boolean DEFAULT false) RETURNS sec_token
+    LANGUAGE plpgsql COST 10
+    AS $$
+declare
+  -- устаревание токена безопасности
+  now      timestamp with time zone;
+begin
+  -- если устаревание не принудительное, то проверяем токен на валидность
+  if (not p_force) then
+    begin
+      select * into p_token from sec_token_valid(p_token.localvalue);
+    exception
+      when NO_DATA_FOUND or TOO_MANY_ROWS then p_force := true; -- если токен не валиден, старим его принудительно
+    end;
+  end if;
+  -- если токен не валиден или если устаревание принудительное
+  if p_force then
+    -- текущее дата/время
+    now := clock_timestamp();
+    -- если токен не был ограничен по времени действия, ограничим его текущим моментом
+    p_token.validtill := coalesce(p_token.validtill, now);
+    -- обновим журнал
+    update sec_token_log
+       set localvalue = p_token.localvalue, 
+           originvalue = p_token.originvalue, 
+           credential = p_token.credential, 
+           auth_path_id = p_token.auth_path_id, 
+           session_id = p_token.session_id, 
+           validfrom = p_token.validfrom, 
+           validtill = p_token.validtill,
+           when_logged = now
+     where id = p_token.id;
+    -- если в журнале не было этого токена, добавим его туда
+    if (not found) then
+      insert into sec_token_log (id, localvalue, originvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
+      values (p_token.id, p_token.localvalue, p_token.originvalue, p_token.credential, p_token.auth_path_id, p_token.session_id, p_token.validfrom, p_token.validtill, now);
+    end if;
+    -- удалим токен из оперативной таблицы
+    delete from sec_token where id = p_token.id;
+  end if;
+  return p_token;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_token_stale(p_token sec_token, p_force boolean) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_token_stale(p_token sec_token, p_force boolean); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_token_stale(p_token sec_token, p_force boolean) IS 'устаревание токена безопасности';
+
+
+--
+-- Name: sec_token_valid(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_token_valid(p_tokenvalue text) RETURNS sec_token
     LANGUAGE plpgsql STABLE COST 10
     AS $$
 declare
@@ -1951,8 +2114,8 @@ declare
   l_token  sec_token; -- токен
   now      timestamp with time zone;
 begin
-  -- ищем токен по его значению и источнику его происхождения
-  select * into l_token from sec_token_find_by_value(p_tokenvalue, p_auth_path_id);
+  -- ищем токен по его значению 
+  select * into l_token from sec_token_find_by_value(p_tokenvalue);
   if (found) then
     -- токен найден
     now := clock_timestamp();
@@ -1971,13 +2134,13 @@ end;
 $$;
 
 
-ALTER FUNCTION public.sec_token_valid(p_tokenvalue text, p_auth_path_id integer) OWNER TO postgres;
+ALTER FUNCTION public.sec_token_valid(p_tokenvalue text) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_token_valid(p_tokenvalue text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_token_valid(p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_token_valid(p_tokenvalue text, p_auth_path_id integer) IS 'проверки валидности токена безопасности';
+COMMENT ON FUNCTION sec_token_valid(p_tokenvalue text) IS 'проверки валидности токена безопасности';
 
 
 --
@@ -2633,7 +2796,6 @@ CREATE FUNCTION sec_user_create(p_session_id integer, p_person_id integer, p_nam
   -- создание учетной записи
   l_session  sec_session; -- текущая сессия
   l_user     sec_user;
-  ok         boolean;
   res        integer;
   l_person   prs_person;
   l_uac      sec_user_authcred;
@@ -2650,13 +2812,8 @@ begin
     -- 'SEC00003', 'user %s already exists'
     raise exception unique_violation using message = env_resource_text_format('SEC00003', p_name);
   end if;
-  -- наличие полномочий на создание учетной записи
-  select sec_session_has_permission(p_session_id, 'sec_user.create') into ok;
-  if (not ok) then
-    -- нет полномочий 
-    -- 'SEC00004', 'access denied. has no permission (%s)'
-    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user.create');
-  end if;
+  -- проверка полномочий на выполнение операции
+  perform sec_session_require_permission(p_session_id, 'sec_user.create');
   -- полномочий достаточно
   if (p_person_id is null) then
     l_person := prs_person_create(p_name, (prs_person_kind())."INDIVIDUAL", null, null);
@@ -2668,6 +2825,8 @@ begin
   insert into sec_user_authcred(user_id, auth_path_id, credential, credential_hash, valid_from, valid_till) 
   values (l_user.id, p_auth_path_id, null, null, clock_timestamp(), clock_timestamp()+interval '1 month')
   returning * into l_uac;
+  -- регистрируем событие
+  perform sec_event_start(p_session_id, 'sec_user', 'create', xmlforest(l_user));
   -- проверка учетных данных (пароля) на соответствие политике. 
   /*
   select * into res from sec_user_authcred_comply_policy(p_session_id, l_user.id, null, p_credential, p_auth_path_id);
@@ -2794,7 +2953,7 @@ begin
   select sec_user_authcred_prepare(1, 'password', 1);
   */
   -- завершаем сессию админа
-  l_root_token := sec_logout(l_root_token.textvalue, l_root_token.auth_path_id);
+  l_root_token := sec_logout(l_root_token.localvalue);
   return true;
 end;
 $$;
@@ -3023,6 +3182,114 @@ ALTER TABLE public.env_event_status_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE env_event_status_id_seq OWNED BY env_event_status.id;
+
+
+--
+-- Name: env_operation; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_operation (
+    id integer NOT NULL,
+    operation_kind_id integer NOT NULL
+);
+
+
+ALTER TABLE public.env_operation OWNER TO postgres;
+
+--
+-- Name: TABLE env_operation; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_operation IS 'журнал бизнес-операций';
+
+
+--
+-- Name: COLUMN env_operation.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_operation.id IS 'идентификатор';
+
+
+--
+-- Name: COLUMN env_operation.operation_kind_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_operation.operation_kind_id IS 'код типа бизнес-операции';
+
+
+--
+-- Name: env_operation_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_operation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_operation_id_seq OWNER TO postgres;
+
+--
+-- Name: env_operation_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_operation_id_seq OWNED BY env_operation.id;
+
+
+--
+-- Name: env_operation_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE env_operation_kind (
+    id integer NOT NULL,
+    name character varying(255)
+);
+
+
+ALTER TABLE public.env_operation_kind OWNER TO postgres;
+
+--
+-- Name: TABLE env_operation_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE env_operation_kind IS 'типы бизнес-операций';
+
+
+--
+-- Name: COLUMN env_operation_kind.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_operation_kind.id IS 'идентификатор';
+
+
+--
+-- Name: COLUMN env_operation_kind.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN env_operation_kind.name IS 'наименование';
+
+
+--
+-- Name: env_operation_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE env_operation_kind_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.env_operation_kind_id_seq OWNER TO postgres;
+
+--
+-- Name: env_operation_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE env_operation_kind_id_seq OWNED BY env_operation_kind.id;
 
 
 --
@@ -3545,6 +3812,49 @@ ALTER SEQUENCE sec_session_id_seq OWNED BY sec_session.id;
 
 
 --
+-- Name: sec_session_log; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_session_log (
+    user_id integer NOT NULL,
+    whenstarted timestamp with time zone NOT NULL,
+    whenended timestamp with time zone,
+    id integer NOT NULL,
+    when_logged timestamp with time zone DEFAULT clock_timestamp() NOT NULL
+);
+
+
+ALTER TABLE public.sec_session_log OWNER TO postgres;
+
+--
+-- Name: COLUMN sec_session_log.user_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session_log.user_id IS 'код пользователя';
+
+
+--
+-- Name: COLUMN sec_session_log.whenstarted; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session_log.whenstarted IS 'дата/время начала сессии';
+
+
+--
+-- Name: COLUMN sec_session_log.whenended; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session_log.whenended IS 'дата/время завершения сессии (если была завершена явным образом)';
+
+
+--
+-- Name: COLUMN sec_session_log.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_session_log.id IS 'идентификатор сессии';
+
+
+--
 -- Name: sec_token_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
@@ -3563,6 +3873,81 @@ ALTER TABLE public.sec_token_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE sec_token_id_seq OWNED BY sec_token.id;
+
+
+--
+-- Name: sec_token_log; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE sec_token_log (
+    id integer NOT NULL,
+    localvalue text NOT NULL,
+    credential text,
+    auth_path_id integer,
+    session_id integer NOT NULL,
+    validfrom timestamp with time zone NOT NULL,
+    validtill timestamp with time zone,
+    originvalue text,
+    when_logged timestamp with time zone DEFAULT clock_timestamp() NOT NULL
+);
+
+
+ALTER TABLE public.sec_token_log OWNER TO postgres;
+
+--
+-- Name: COLUMN sec_token_log.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.id IS 'идентификатор токена';
+
+
+--
+-- Name: COLUMN sec_token_log.localvalue; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.localvalue IS 'локализованное (уникальное) значение токена';
+
+
+--
+-- Name: COLUMN sec_token_log.credential; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.credential IS 'Учетные данные, использованные при аутентификации';
+
+
+--
+-- Name: COLUMN sec_token_log.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: COLUMN sec_token_log.session_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.session_id IS 'идентификатор сессии';
+
+
+--
+-- Name: COLUMN sec_token_log.validfrom; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.validfrom IS 'момент (включительно) начала действия токена';
+
+
+--
+-- Name: COLUMN sec_token_log.validtill; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.validtill IS 'момент (включительно) окончания действия токена';
+
+
+--
+-- Name: COLUMN sec_token_log.originvalue; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_log.originvalue IS 'исходное оригинальное значение токена, полученное от источника аутентификации';
 
 
 --
@@ -3714,6 +4099,20 @@ ALTER TABLE ONLY env_event_kind ALTER COLUMN id SET DEFAULT nextval('env_event_k
 --
 
 ALTER TABLE ONLY env_event_status ALTER COLUMN id SET DEFAULT nextval('env_event_status_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_operation ALTER COLUMN id SET DEFAULT nextval('env_operation_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_operation_kind ALTER COLUMN id SET DEFAULT nextval('env_operation_kind_id_seq'::regclass);
 
 
 --
@@ -3883,6 +4282,36 @@ SELECT pg_catalog.setval('env_event_status_id_seq', 1, false);
 
 
 --
+-- Data for Name: env_operation; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_operation (id, operation_kind_id) FROM stdin;
+\.
+
+
+--
+-- Name: env_operation_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_operation_id_seq', 1, false);
+
+
+--
+-- Data for Name: env_operation_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY env_operation_kind (id, name) FROM stdin;
+\.
+
+
+--
+-- Name: env_operation_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('env_operation_kind_id_seq', 1, false);
+
+
+--
 -- Data for Name: env_resource; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -3945,6 +4374,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 57	1
 58	1
 59	1
+60	1
 \.
 
 
@@ -3952,7 +4382,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 59, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 60, true);
 
 
 --
@@ -4013,8 +4443,6 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 35	credential must not be changed "%1$s" after previos changes at "%2$s"	SEC00023	45
 36	token "%s" expired	SEC00025	45
 37	token "%s" not found	SEC00026	45
-38	token value "%1$s" not found for authentication path "%2$s"	SEC00027	45
-39	token value "%1$s" not unique for authentication path "%2$s"	SEC00028	45
 40	country alpha2code=%s not found	I1800005	45
 41	country alpha2code=%s not unique	I1800006	45
 42	country alpha3code=%s not found	I1800007	45
@@ -4035,6 +4463,9 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 57	authentication kind not unique by name "%s"	SEC00032	45
 58	authentication kind not found by code "%s"	SEC00033	45
 59	authentication kind not unique by code "%s"	SEC00034	45
+39	token value "%1$s" not unique	SEC00028	45
+60	value "%2$s" of "%1$s" must be not null	SEC00035	45
+38	token value "%1$s" not found	SEC00027	45
 \.
 
 
@@ -5481,6 +5912,8 @@ COPY sec_event (whenfired, event_kind, event_status, session_id, context) FROM s
 2016-01-02 01:57:27.331835+03	4	1	21	\N
 2016-01-03 01:25:07.938859+03	1	1	28	\N
 2016-01-03 01:25:07.940722+03	6	1	28	\N
+2016-01-04 01:51:20.030701+03	1	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>
+2016-01-04 01:51:20.038502+03	4	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>
 \.
 
 
@@ -5499,6 +5932,7 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 1	2016-01-02 01:25:49.402142+03	\N	14
 1	2016-01-02 01:57:27.326147+03	2016-01-02 01:57:27.331323+03	21
 1	2016-01-03 01:25:07.938238+03	\N	28
+1	2016-01-04 01:51:20.02965+03	\N	31
 \.
 
 
@@ -5506,18 +5940,28 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 -- Name: sec_session_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_session_id_seq', 28, true);
+SELECT pg_catalog.setval('sec_session_id_seq', 31, true);
+
+
+--
+-- Data for Name: sec_session_log; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_session_log (user_id, whenstarted, whenended, id, when_logged) FROM stdin;
+1	2016-01-04 01:51:20.02965+03	\N	31	2016-01-04 01:51:20.029931+03
+\.
 
 
 --
 -- Data for Name: sec_token; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_token (id, textvalue, credential, auth_path_id, session_id, validfrom, validtill) FROM stdin;
-7	85d135d1-1368-7737-f668-997aedd00c4c	\N	1	13	2016-01-02 01:24:55.281817+03	\N
-8	6a54e86b-4510-9df6-c6a7-1cef1a94cbcd	\N	1	14	2016-01-02 01:25:49.403274+03	\N
-15	a1ef75db-9e64-e9b7-8145-19c226ed9f4b	\N	1	21	2016-01-02 01:57:27.326467+03	2016-01-02 01:57:27.330516+03
-22	56780b26-c475-d68a-c922-710ff64e9f32	\N	1	28	2016-01-03 01:25:07.938485+03	\N
+COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom, validtill, originvalue) FROM stdin;
+7	85d135d1-1368-7737-f668-997aedd00c4c	\N	1	13	2016-01-02 01:24:55.281817+03	\N	\N
+8	6a54e86b-4510-9df6-c6a7-1cef1a94cbcd	\N	1	14	2016-01-02 01:25:49.403274+03	\N	\N
+15	a1ef75db-9e64-e9b7-8145-19c226ed9f4b	\N	1	21	2016-01-02 01:57:27.326467+03	2016-01-02 01:57:27.330516+03	\N
+22	56780b26-c475-d68a-c922-710ff64e9f32	\N	1	28	2016-01-03 01:25:07.938485+03	\N	\N
+25	25#b82c08eb-472c-f985-1732-64d5d07639c3	\N	1	31	2016-01-04 01:51:20.030188+03	\N	b82c08eb-472c-f985-1732-64d5d07639c3
 \.
 
 
@@ -5525,7 +5969,16 @@ COPY sec_token (id, textvalue, credential, auth_path_id, session_id, validfrom, 
 -- Name: sec_token_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_token_id_seq', 22, true);
+SELECT pg_catalog.setval('sec_token_id_seq', 25, true);
+
+
+--
+-- Data for Name: sec_token_log; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY sec_token_log (id, localvalue, credential, auth_path_id, session_id, validfrom, validtill, originvalue, when_logged) FROM stdin;
+25	25#b82c08eb-472c-f985-1732-64d5d07639c3	\N	1	31	2016-01-04 01:51:20.030188+03	\N	b82c08eb-472c-f985-1732-64d5d07639c3	2016-01-04 01:51:20.030506+03
+\.
 
 
 --
@@ -5649,6 +6102,22 @@ ALTER TABLE ONLY env_event_kind
 
 ALTER TABLE ONLY env_event_status
     ADD CONSTRAINT pk_env_event_status PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_operation; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_operation
+    ADD CONSTRAINT pk_env_operation PRIMARY KEY (id);
+
+
+--
+-- Name: pk_env_operation_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY env_operation_kind
+    ADD CONSTRAINT pk_env_operation_kind PRIMARY KEY (id);
 
 
 --
@@ -5788,11 +6257,27 @@ ALTER TABLE ONLY sec_session
 
 
 --
+-- Name: pk_sec_session_log; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_session_log
+    ADD CONSTRAINT pk_sec_session_log PRIMARY KEY (id);
+
+
+--
 -- Name: pk_sec_token; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
 ALTER TABLE ONLY sec_token
     ADD CONSTRAINT pk_sec_token PRIMARY KEY (id);
+
+
+--
+-- Name: pk_sec_token_log; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY sec_token_log
+    ADD CONSTRAINT pk_sec_token_log PRIMARY KEY (id);
 
 
 --
@@ -5892,11 +6377,11 @@ ALTER TABLE ONLY i18_language
 
 
 --
--- Name: uk_sec_token02; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+-- Name: uk_sec_token01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
 ALTER TABLE ONLY sec_token
-    ADD CONSTRAINT uk_sec_token02 UNIQUE (id, textvalue);
+    ADD CONSTRAINT uk_sec_token01 UNIQUE (localvalue);
 
 
 --
@@ -5921,6 +6406,14 @@ ALTER TABLE ONLY env_application_relation
 
 ALTER TABLE ONLY env_event_kind
     ADD CONSTRAINT fk_env_event_kind01 FOREIGN KEY (class_id) REFERENCES env_class(id);
+
+
+--
+-- Name: fk_env_operation01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY env_operation
+    ADD CONSTRAINT fk_env_operation01 FOREIGN KEY (operation_kind_id) REFERENCES env_operation_kind(id);
 
 
 --
