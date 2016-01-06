@@ -1580,7 +1580,6 @@ CREATE FUNCTION sec_login(p_tokenvalue text, p_auth_path_id integer, p_user_name
   l_uac      sec_user_authcred;
   l_session  sec_session;
   l_token    sec_token;
-  l_event    sec_event;
 begin
   -- ищем учетную запись по имени
   select * into l_user from sec_user_by_name(p_user_name);
@@ -1599,13 +1598,14 @@ begin
     insert into sec_token_log (id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
     values (l_token.id, l_token.originvalue, l_token.localvalue, l_token.credential, l_token.auth_path_id, l_token.session_id, l_token.validfrom, l_token.validtill, clock_timestamp());
     -- регистрируем событие логина
-    select * into l_event from sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
+    perform sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
     -- возвращаем строку токена
     return l_token;
   else 
     -- учетная запись не найдена
     -- регистрируем событие неудачной попытки логина
-    select * into l_event from sec_event_start(nextval('sec_session_id_seq'::regclass), 'sec_session', 'login_failed');
+    l_session.id := nextval('sec_session_id_seq');
+    perform sec_event_start(l_session.id, 'sec_session', 'login_failed');
     -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
     raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
     return null;
@@ -1652,13 +1652,14 @@ begin
     insert into sec_token_log (id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
     values (l_token.id, l_token.originvalue, l_token.localvalue, l_token.credential, l_token.auth_path_id, l_token.session_id, l_token.validfrom, l_token.validtill, clock_timestamp());
     -- регистрируем событие логина
-    select sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
+    perform sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
     -- возвращаем строку токена
     return l_token;
   else 
     -- учетные данные не приняты
     -- регистрируем событие неудачной попытки логина
-    select sec_event_start(nextval('sec_session_id_seq'::regclass), 'sec_session', 'login_failed');
+    l_session.id := nextval('sec_session_id_seq');
+    perform sec_event_start(l_session.id, 'sec_session', 'login_failed');
     -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
     raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
     return null;
@@ -2255,7 +2256,7 @@ CREATE FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential text, 
   -- если учетные данные не приняты, возвращает пустой набор
   l_user_id  integer;
 begin
-  select /* sec_0002 */ id into l_user_id from sec_user_find_by_name(p_user_name);
+  select /* sec_0002 */ id into l_user_id from sec_user_by_name(p_user_name);
   return query select /* sec_0003 */ * from sec_user_authcred_accepted(l_user_id, p_credential, p_auth_path_id);
 end;
 $$;
@@ -2268,53 +2269,6 @@ ALTER FUNCTION public.sec_user_authcred_accepted(p_user_name text, p_credential 
 --
 
 COMMENT ON FUNCTION sec_user_authcred_accepted(p_user_name text, p_credential text, p_auth_path_id integer) IS 'проверка учетных данных. возвращает набор, для которых учетные данные приняты (подтверждены). если учетные данные не приняты, возвращает пустой набор';
-
-
---
--- Name: sec_user_authcred_block(integer, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION sec_user_authcred_block(p_session_id integer, p_user_id integer, p_auth_path_id integer) RETURNS sec_user_authcred
-    LANGUAGE plpgsql STABLE COST 5
-    AS $$declare
-  -- блокировка указанных учетных данных.
-  l_session  sec_session; -- текущая сессия
-  l_user     sec_user;
-  ok         boolean;
-  l_uac      sec_user_authcred;
-begin
-  -- текущая сессия
-  select * into l_session from sec_session_valid(p_session_id);
-  -- проверка наличия полномочий
-  ok := sec_session_has_permission(p_session_id, 'sec_user_authcred.block');
-  if (not ok) then -- полномочий нет
-    -- 'SEC00004', 'access denied. has no permission (%s)'
-    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user_authcred.block');
-  end if;
-  -- полномочий достаточно
-  l_user := sec_user_by_id(p_user_id);
-  l_uac := sec_user_authcred_by_id(l_user.user_id, p_auth_path_id);
-  -- сохраняем текщие учетные данные в журнал изменений
-  insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
-  values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
-  -- ограничиваем срок действия указанных учетных данных
-  update sec_user_authcred acr
-     set valid_till = clock_timestamp()
-   where user_id = l_user.user_id
-     and auth_path_id = p_auth_path_id
-  returning * into l_uac;
-  return l_uac;
-end;
-$$;
-
-
-ALTER FUNCTION public.sec_user_authcred_block(p_session_id integer, p_user_id integer, p_auth_path_id integer) OWNER TO postgres;
-
---
--- Name: FUNCTION sec_user_authcred_block(p_session_id integer, p_user_id integer, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON FUNCTION sec_user_authcred_block(p_session_id integer, p_user_id integer, p_auth_path_id integer) IS 'блокировка указанных учетных данных.';
 
 
 --
@@ -2381,6 +2335,7 @@ CREATE FUNCTION sec_user_authcred_comply_policy(p_session_id integer, p_user_id 
   l_punctuation constant text := '[^a-zA-Zа-яА-Я0-9]'; -- регулярное выражение для поиска знаков препинания и спецсимволов
   l_min_cred_age constant interval := '1 day'; -- сколько дней нельзя менять учетные данные (минимальный срок жизни учетных данных)
   l_max_cred_age constant interval := '100 day'; -- сколько дней нельзя использовать такие-же учетные данные (максимальный срок жизни учетных данных)
+  l_text_is_similar integer; -- результат, при котором тексты считаются похожими
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
@@ -2396,7 +2351,7 @@ begin
         return env_resource_text_find_by_code('SEC00015', char_length(p_credential)::text, l_min_length::text);
       end if;
       -- сложность (большие, маленькие буквы, цифры, знаки)
-      if regexp_matches(p_credential, l_alpha) is null then -- не содержит цифр
+      if regexp_matches(p_credential, l_digit) is null then -- не содержит цифр
         -- 'SEC00016', 'credential must contain at least one digit'
         return env_resource_text_find_by_code('SEC00016');
       end if;
@@ -2416,13 +2371,14 @@ begin
         -- 'SEC00020', 'credential must contain at least one punctuation character'
         return env_resource_text_find_by_code('SEC00020');
       end if;
+      l_text_is_similar := env_resource_text_find_by_code('RES00003');
       -- если имя учетной записи и новые учетные данные похожи сточностью до 5 общих символов подряд
-      if env_text_similar(l_user.name, p_credential, l_similarity) then 
+      if env_text_similar(l_user.name, p_credential, l_similarity) = l_text_is_similar then 
         -- 'SEC00021', 'credential must not be similar to user name'
         return env_resource_text_find_by_code('SEC00021');
       end if;
       -- если старые и новые учетные данные похожи сточностью до 5 общих символов подряд
-      if env_text_similar(p_old_credential, p_credential, l_similarity) then 
+      if env_text_similar(p_old_credential, p_credential, l_similarity) = l_text_is_similar then 
         -- 'SEC00022', 'credential must not be similar to previous one'
         return env_resource_text_find_by_code('SEC00022');
       end if;
@@ -2484,26 +2440,39 @@ COMMENT ON FUNCTION sec_user_authcred_comply_policy(p_session_id integer, p_user
 
 
 --
--- Name: sec_user_authcred_encrypt(integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: sec_user_authcred_encrypt(integer, integer, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer) RETURNS text
+CREATE FUNCTION sec_user_authcred_encrypt(p_session_id integer, p_user_id integer, p_credential text, p_auth_path_id integer) RETURNS text
     LANGUAGE plpgsql COST 10
-    AS $_$declare
+    AS $$declare
   -- возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью
+  l_session  sec_session; -- текущая сессия
+  l_user     sec_user;
+  ok         boolean;
   res  text;
 begin
+  -- текущая сессия
+  select * into l_session from sec_session_valid(p_session_id);
+  -- указанная учетная запись
+  select * into l_user from sec_user_by_id(p_user_id);
+  --наличие полномочий на операцию с чужими учетными данными или на свои
+  select sec_session_has_permission(p_session_id, 'sec_user_authcred.encrypt') or (l_session.user_id = l_user.id) into ok;
+  if (not ok) then
+    -- 'SEC00004', 'access denied. has no permission (%s)'
+    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user_authcred.encrypt');
+  end if;
   select case -- обработка разных типов аутентификации и разновидностей учетных данных.
            -- при добавлении новых видов аутентификации их обработку надо добавить сюда
-           when (ak.code = 'pg_crypt') then crypt($2, gen_salt(ap.credential_kind))
+           when (ak.code = 'pg_crypt') then crypt(p_credential, gen_salt(ap.credential_kind))
            else null
          end
     into strict res
     from sec_user_authcred acr,
          sec_authentication_path ap,
          sec_authentication_kind ak
-   where (acr.user_id = $1)
-     and (acr.auth_path_id = $3)
+   where (acr.user_id = p_user_id)
+     and (acr.auth_path_id = p_auth_path_id)
      and (ap.id = acr.auth_path_id)
      and (ak.id = ap.authentication_kind_id);
   return res;
@@ -2513,16 +2482,16 @@ exception
   when TOO_MANY_ROWS then
     raise exception 'user_id (%) and auth_path_id (%) are not unique', p_user_id, p_auth_path_id;
 end;
-$_$;
+$$;
 
 
-ALTER FUNCTION public.sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
+ALTER FUNCTION public.sec_user_authcred_encrypt(p_session_id integer, p_user_id integer, p_credential text, p_auth_path_id integer) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_user_authcred_encrypt(p_session_id integer, p_user_id integer, p_credential text, p_auth_path_id integer); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_user_authcred_encrypt(p_user_id integer, p_credential text, p_auth_path_id integer) IS 'возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью';
+COMMENT ON FUNCTION sec_user_authcred_encrypt(p_session_id integer, p_user_id integer, p_credential text, p_auth_path_id integer) IS 'возвращает учетные данные в форме, предназначенной для хранения. для паролей это обычно хеш пароля с солью';
 
 
 --
@@ -2629,19 +2598,19 @@ begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
   -- указанная учетная запись
-  select * into l_user from sec_user_find_by_name(p_user_name);
+  select * into l_user from sec_user_by_name(p_user_name);
   --наличие полномочий на смену чужих учетных данных или попытка сменить свои
   select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset_any') or (l_session.user_id = l_user.id) into ok;
   if (ok) then -- полномочий достаточно
-    l_uac := sec_user_authcred_by_user_id(l_user.id, p_auth_path_id);
+    l_uac := sec_user_authcred_by_pk(l_user.id, p_auth_path_id);
     -- сохраняем текщие учетные данные в журнал изменений
     insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
     values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
     -- TODO: написать проверку политики учетных данных и вызвать её здесь
     -- меняем учетные данные
     update sec_user_authcred
-       set credential = sec_user_authcred_prepare(user_id, p_credential, auth_path_id),
-           credential_hash = sec_user_authcred_hash(l_session, p_credential, p_auth_path_id)
+       set credential = sec_user_authcred_encrypt(l_session.id, user_id, p_credential, auth_path_id),
+           credential_hash = sec_user_authcred_hash(l_session.id, user_id, p_credential, p_auth_path_id)
      where user_id = l_user.id
        and auth_path_id = l_uac.auth_path_id;
     -- если учетные данные изменены
@@ -2661,6 +2630,54 @@ ALTER FUNCTION public.sec_user_authcred_reset_any(p_session_id integer, p_user_n
 --
 
 COMMENT ON FUNCTION sec_user_authcred_reset_any(p_session_id integer, p_user_name text, p_credential text, p_auth_path_id integer) IS 'смена учетных данных (p_credential) для указанной учетной записи (p_user_name)';
+
+
+--
+-- Name: sec_user_authcred_set_valid_period(integer, integer, integer, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_set_valid_period(p_session_id integer, p_user_id integer, p_auth_path_id integer, p_valid_from timestamp with time zone, p_valid_till timestamp with time zone) RETURNS sec_user_authcred
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  -- блокировка указанных учетных данных.
+  l_session  sec_session; -- текущая сессия
+  l_user     sec_user;
+  ok         boolean;
+  l_uac      sec_user_authcred;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_valid(p_session_id);
+  -- проверка наличия полномочий
+  ok := sec_session_has_permission(p_session_id, 'sec_user_authcred.set_valid_period');
+  if (not ok) then -- полномочий нет
+    -- 'SEC00004', 'access denied. has no permission (%s)'
+    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user_authcred.set_valid_period');
+  end if;
+  -- полномочий достаточно
+  l_user := sec_user_by_id(p_user_id);
+  l_uac := sec_user_authcred_by_pk(l_user.user_id, p_auth_path_id);
+  -- сохраняем текщие учетные данные в журнал изменений
+  insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
+  values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
+  -- ограничиваем срок действия указанных учетных данных
+  update sec_user_authcred acr
+     set valid_from = coalesce(p_valid_from, valid_from, now),
+         valid_till = coalesce(p_valid_till, valid_till, now)
+   where user_id = l_user.user_id
+     and auth_path_id = p_auth_path_id
+  returning * into l_uac;
+  return l_uac;
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_set_valid_period(p_session_id integer, p_user_id integer, p_auth_path_id integer, p_valid_from timestamp with time zone, p_valid_till timestamp with time zone) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_set_valid_period(p_session_id integer, p_user_id integer, p_auth_path_id integer, p_valid_from timestamp with time zone, p_valid_till timestamp with time zone); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_set_valid_period(p_session_id integer, p_user_id integer, p_auth_path_id integer, p_valid_from timestamp with time zone, p_valid_till timestamp with time zone) IS 'блокировка указанных учетных данных.';
 
 
 SET default_with_oids = true;
@@ -2898,21 +2915,30 @@ COMMENT ON FUNCTION test_env() IS 'модульные тесты проверк�
 
 CREATE FUNCTION test_sec() RETURNS boolean
     LANGUAGE plpgsql COST 10
-    AS $$declare
+    AS $_$declare
   -- модульные тесты проверки операций над учетными записями и учетными данными
+  c_auth_path_id  constant integer := 1; -- источник аутентификации админа (подойдет код любого существующего источника)
   l_root_token    sec_token;
   l_root_session  sec_session;
   c_auth_kind     constant text := 'pg_crypt';
   l_ak            sec_authentication_kind;
   l_ap            sec_authentication_path;
   c_user_name     constant text := 'test-001';
-  c_credential    constant text := 'test-creDential#001';
+  c_credential    constant text := 'te$t-creDential#001';
   l_user          sec_user;
+  l_token         sec_token;
+  l_session       sec_session;
+  l_cnt           integer;
+  l_ok            integer;
+  l_res           integer;
+  l_uac           sec_user_authcred;
 begin
   -- создаем сессию админа
-  l_root_token := sec_login(uuid_generate()::text, 1, 'root');
+  l_root_token := sec_login(uuid_generate()::text, c_auth_path_id, 'root');
   -- проверяем валидность созданной сессии
   l_root_session := sec_session_valid(l_root_token.session_id);
+  -- поиск сессии
+  select * into l_session from sec_session_find_by_id(l_root_token.session_id);
   -- схемы, виды аутентификации
   begin
     l_ak := sec_authentication_kind_by_code(c_auth_kind);
@@ -2931,32 +2957,50 @@ begin
     when NO_DATA_FOUND then
       l_user := sec_user_create(l_root_session.id, c_user_name, l_ap.id, c_credential);
   end;
-
+  -- создаем сессию юзера
+  l_token := sec_login(c_user_name, c_credential, l_ap.id);
+  if (l_token is null) then
+    -- сброс своего пароля
+    if (not sec_user_authcred_reset_any(l_root_session.id, c_user_name, c_credential, l_ap.id)) then
+      raise exception NO_DATA_FOUND using message = 'authcred NOT reseted';
+    end if;
+    l_token := sec_login(c_user_name, c_credential, l_ap.id);
+  end if;
+  -- проверяем валидность созданной сессии
+  l_session := sec_session_valid(l_token.session_id);
+  -- проверка наличия валидных учетных данных для аутентификации
+  select * into l_uac from sec_user_authcred_by_pk(l_session.user_id, l_token.auth_path_id);
+  -- проверка учетных данных при аутентификации
+  select count(*) into l_cnt from sec_user_authcred_accepted(l_session.user_id, c_credential, l_token.auth_path_id);
+  if (l_cnt = 0) then
+    raise exception NO_DATA_FOUND using message = 'authcred NOT accepted';
+  end if;
+  -- проверка учетных данных при аутентификации
+  select count(*) into l_cnt from sec_user_authcred_accepted(c_user_name, c_credential, l_token.auth_path_id);
+  if (l_cnt = 0) then
+    raise exception NO_DATA_FOUND using message = 'authcred NOT accepted';
+  end if;
+  select * into l_ok from env_resource_text_find_by_code('ANY00001');
+  if (l_ok is null) then
+    raise exception NO_DATA_FOUND using message = 'env_resource_text_find_by_code failed to find resource with code "ANY00001"';
+  end if;
+  -- проверка на соответствие политике учетных данных
   /*
-﻿  -- поиск сессии
-  select sec_session_find_by_id('0d64f5e2-c558-b11f-9efd-a10c77d60de1');
-  -- сброс пароля
-  select sec_user_authcred_reset_any('0d64f5e2-c558-b11f-9efd-a10c77d60de1', 'root', 'password', 1);
-  -- сброс своего пароля
-  select sec_user_authcred_reset('0d64f5e2-c558-b11f-9efd-a10c77d60de1', 'password1', 'password', 1);
-  -- установка пароля
-  update sec_user_authcred acr
-     set credential = crypt('password', gen_salt('bf'))
-   where user_id = 1
-     and auth_path_id = 1;
-
-  -- попытка аутентификации
-  select sec_user_authcred_accepted('root', 'password');
-  --
-  select sec_user_authcred_accepted('root', 'password') limit 1;
-  --
-  select sec_user_authcred_prepare(1, 'password', 1);
+  select * into l_res from sec_user_authcred_comply_policy(l_session.id, l_session.user_id, null, c_credential, l_token.auth_path_id);
+  if (l_res <> l_ok) then
+    raise exception NO_DATA_FOUND using message = 'authcred NOT comply policy. result code = '|| l_res::text;
+  end if;
   */
+
+  -- блокировка 
+  select * into l_uac from sec_user_authcred_set_valid_period(l_root_session.id, l_uac.user_id, l_uac.auth_path_id, yesterday, today);
+    -- завершаем сессию юзера
+  l_token := sec_logout(l_token.localvalue);
   -- завершаем сессию админа
   l_root_token := sec_logout(l_root_token.localvalue);
   return true;
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION public.test_sec() OWNER TO postgres;
@@ -3182,114 +3226,6 @@ ALTER TABLE public.env_event_status_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE env_event_status_id_seq OWNED BY env_event_status.id;
-
-
---
--- Name: env_operation; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE env_operation (
-    id integer NOT NULL,
-    operation_kind_id integer NOT NULL
-);
-
-
-ALTER TABLE public.env_operation OWNER TO postgres;
-
---
--- Name: TABLE env_operation; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE env_operation IS 'журнал бизнес-операций';
-
-
---
--- Name: COLUMN env_operation.id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_operation.id IS 'идентификатор';
-
-
---
--- Name: COLUMN env_operation.operation_kind_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_operation.operation_kind_id IS 'код типа бизнес-операции';
-
-
---
--- Name: env_operation_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE env_operation_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.env_operation_id_seq OWNER TO postgres;
-
---
--- Name: env_operation_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE env_operation_id_seq OWNED BY env_operation.id;
-
-
---
--- Name: env_operation_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE env_operation_kind (
-    id integer NOT NULL,
-    name character varying(255)
-);
-
-
-ALTER TABLE public.env_operation_kind OWNER TO postgres;
-
---
--- Name: TABLE env_operation_kind; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE env_operation_kind IS 'типы бизнес-операций';
-
-
---
--- Name: COLUMN env_operation_kind.id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_operation_kind.id IS 'идентификатор';
-
-
---
--- Name: COLUMN env_operation_kind.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_operation_kind.name IS 'наименование';
-
-
---
--- Name: env_operation_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE env_operation_kind_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.env_operation_kind_id_seq OWNER TO postgres;
-
---
--- Name: env_operation_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE env_operation_kind_id_seq OWNED BY env_operation_kind.id;
 
 
 --
@@ -3649,6 +3585,281 @@ CREATE SEQUENCE mdd_datatype_sq
 
 
 ALTER TABLE public.mdd_datatype_sq OWNER TO postgres;
+
+--
+-- Name: opn_operation; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE opn_operation (
+    id integer NOT NULL,
+    operation_kind_id integer NOT NULL,
+    modified_on timestamp with time zone NOT NULL,
+    modified_by integer NOT NULL,
+    applied_on timestamp with time zone,
+    applied_by integer,
+    applied_order integer
+);
+
+
+ALTER TABLE public.opn_operation OWNER TO postgres;
+
+--
+-- Name: TABLE opn_operation; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE opn_operation IS 'журнал бизнес-операций';
+
+
+--
+-- Name: COLUMN opn_operation.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.id IS 'идентификатор';
+
+
+--
+-- Name: COLUMN opn_operation.operation_kind_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.operation_kind_id IS 'код типа бизнес-операции';
+
+
+--
+-- Name: COLUMN opn_operation.modified_on; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.modified_on IS 'дата / время создания или последней модификации';
+
+
+--
+-- Name: COLUMN opn_operation.modified_by; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.modified_by IS 'пользователь, создавший запись или внесший в нее последнюю модификацию';
+
+
+--
+-- Name: COLUMN opn_operation.applied_on; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.applied_on IS 'дата / время применения (выполнения) операции';
+
+
+--
+-- Name: COLUMN opn_operation.applied_by; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.applied_by IS 'пользователь, применивший (выполнивший) операцию';
+
+
+--
+-- Name: COLUMN opn_operation.applied_order; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation.applied_order IS 'порядковый номер выполнения (применения) операции';
+
+
+--
+-- Name: opn_operation_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE opn_operation_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.opn_operation_id_seq OWNER TO postgres;
+
+--
+-- Name: opn_operation_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE opn_operation_id_seq OWNED BY opn_operation.id;
+
+
+--
+-- Name: opn_operation_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE opn_operation_kind (
+    id integer NOT NULL,
+    name character varying(255),
+    operation_target_id integer NOT NULL
+);
+
+
+ALTER TABLE public.opn_operation_kind OWNER TO postgres;
+
+--
+-- Name: TABLE opn_operation_kind; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE opn_operation_kind IS 'типы бизнес-операций';
+
+
+--
+-- Name: COLUMN opn_operation_kind.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation_kind.id IS 'идентификатор';
+
+
+--
+-- Name: COLUMN opn_operation_kind.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation_kind.name IS 'наименование';
+
+
+--
+-- Name: COLUMN opn_operation_kind.operation_target_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_operation_kind.operation_target_id IS 'код целевого объекта для операции';
+
+
+--
+-- Name: opn_operation_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE opn_operation_kind_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.opn_operation_kind_id_seq OWNER TO postgres;
+
+--
+-- Name: opn_operation_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE opn_operation_kind_id_seq OWNED BY opn_operation_kind.id;
+
+
+--
+-- Name: opn_person; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE opn_person (
+    operation_id integer NOT NULL,
+    person_id integer NOT NULL,
+    citizenship_country_id integer,
+    language_id integer,
+    person_kind_id smallint
+);
+
+
+ALTER TABLE public.opn_person OWNER TO postgres;
+
+--
+-- Name: TABLE opn_person; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE opn_person IS 'операция по созданию/модификации/удалению физ. и юр.лица';
+
+
+--
+-- Name: COLUMN opn_person.operation_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person.operation_id IS 'код операции';
+
+
+--
+-- Name: COLUMN opn_person.person_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person.person_id IS 'код физ. / юр.лица';
+
+
+--
+-- Name: COLUMN opn_person.citizenship_country_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person.citizenship_country_id IS 'гражданство, национальная принадлежность, подданство';
+
+
+--
+-- Name: COLUMN opn_person.language_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person.language_id IS 'родной (основной) язык для общения';
+
+
+--
+-- Name: COLUMN opn_person.person_kind_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person.person_kind_id IS 'тип персоны';
+
+
+--
+-- Name: opn_target; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE opn_target (
+    id integer NOT NULL,
+    name character varying(255),
+    table_name character varying(64)
+);
+
+
+ALTER TABLE public.opn_target OWNER TO postgres;
+
+--
+-- Name: TABLE opn_target; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE opn_target IS 'целевые объекты для бизнес-операций';
+
+
+--
+-- Name: COLUMN opn_target.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_target.id IS 'идентификатор';
+
+
+--
+-- Name: COLUMN opn_target.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_target.name IS 'наименование целевого объекта для операции';
+
+
+--
+-- Name: COLUMN opn_target.table_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_target.table_name IS 'наименование таблицы';
+
+
+--
+-- Name: opn_target_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE opn_target_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.opn_target_id_seq OWNER TO postgres;
+
+--
+-- Name: opn_target_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE opn_target_id_seq OWNED BY opn_target.id;
+
 
 --
 -- Name: prs_person_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -4105,20 +4316,6 @@ ALTER TABLE ONLY env_event_status ALTER COLUMN id SET DEFAULT nextval('env_event
 -- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY env_operation ALTER COLUMN id SET DEFAULT nextval('env_operation_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY env_operation_kind ALTER COLUMN id SET DEFAULT nextval('env_operation_kind_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
 ALTER TABLE ONLY env_resource ALTER COLUMN id SET DEFAULT nextval('env_resource_id_seq'::regclass);
 
 
@@ -4148,6 +4345,27 @@ ALTER TABLE ONLY i18_currency ALTER COLUMN id SET DEFAULT nextval('i18_currency_
 --
 
 ALTER TABLE ONLY i18_language ALTER COLUMN id SET DEFAULT nextval('i18_language_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_operation ALTER COLUMN id SET DEFAULT nextval('opn_operation_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_operation_kind ALTER COLUMN id SET DEFAULT nextval('opn_operation_kind_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_target ALTER COLUMN id SET DEFAULT nextval('opn_target_id_seq'::regclass);
 
 
 --
@@ -4282,36 +4500,6 @@ SELECT pg_catalog.setval('env_event_status_id_seq', 1, false);
 
 
 --
--- Data for Name: env_operation; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY env_operation (id, operation_kind_id) FROM stdin;
-\.
-
-
---
--- Name: env_operation_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('env_operation_id_seq', 1, false);
-
-
---
--- Data for Name: env_operation_kind; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY env_operation_kind (id, name) FROM stdin;
-\.
-
-
---
--- Name: env_operation_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('env_operation_kind_id_seq', 1, false);
-
-
---
 -- Data for Name: env_resource; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -4375,6 +4563,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 58	1
 59	1
 60	1
+61	1
 \.
 
 
@@ -4382,7 +4571,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 60, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 61, true);
 
 
 --
@@ -4466,6 +4655,7 @@ COPY env_resource_text (id, content, code, language_id) FROM stdin;
 39	token value "%1$s" not unique	SEC00028	45
 60	value "%2$s" of "%1$s" must be not null	SEC00035	45
 38	token value "%1$s" not found	SEC00027	45
+61	credential must not be similar to user name	SEC00021	45
 \.
 
 
@@ -5811,6 +6001,59 @@ SELECT pg_catalog.setval('mdd_datatype_sq', 1, false);
 
 
 --
+-- Data for Name: opn_operation; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY opn_operation (id, operation_kind_id, modified_on, modified_by, applied_on, applied_by, applied_order) FROM stdin;
+\.
+
+
+--
+-- Name: opn_operation_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('opn_operation_id_seq', 1, false);
+
+
+--
+-- Data for Name: opn_operation_kind; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY opn_operation_kind (id, name, operation_target_id) FROM stdin;
+\.
+
+
+--
+-- Name: opn_operation_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('opn_operation_kind_id_seq', 1, false);
+
+
+--
+-- Data for Name: opn_person; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY opn_person (operation_id, person_id, citizenship_country_id, language_id, person_kind_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: opn_target; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY opn_target (id, name, table_name) FROM stdin;
+\.
+
+
+--
+-- Name: opn_target_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('opn_target_id_seq', 1, false);
+
+
+--
 -- Data for Name: prs_person; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -5914,6 +6157,22 @@ COPY sec_event (whenfired, event_kind, event_status, session_id, context) FROM s
 2016-01-03 01:25:07.940722+03	6	1	28	\N
 2016-01-04 01:51:20.030701+03	1	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>
 2016-01-04 01:51:20.038502+03	4	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>
+2016-01-06 02:04:12.736708+03	1	1	32	<l_token>(26,26#e45c6c27-e576-ab7f-9db1-890f472bf109,,1,32,"2016-01-06 02:04:12.731973+03",,e45c6c27-e576-ab7f-9db1-890f472bf109)</l_token>
+2016-01-06 02:04:12.753878+03	4	1	32	<l_token>(26,26#e45c6c27-e576-ab7f-9db1-890f472bf109,,1,32,"2016-01-06 02:04:12.731973+03",,e45c6c27-e576-ab7f-9db1-890f472bf109)</l_token>
+2016-01-06 02:04:15.204013+03	1	1	33	<l_token>(27,27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca,,1,33,"2016-01-06 02:04:15.203489+03",,5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca)</l_token>
+2016-01-06 02:04:15.206454+03	4	1	33	<l_token>(27,27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca,,1,33,"2016-01-06 02:04:15.203489+03",,5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca)</l_token>
+2016-01-06 02:17:42.78917+03	1	1	37	<l_token>(31,31#0e8fc585-9bbf-77ad-bc9f-40855c29d089,,1,37,"2016-01-06 02:17:42.788536+03",,0e8fc585-9bbf-77ad-bc9f-40855c29d089)</l_token>
+2016-01-06 02:17:42.806943+03	1	1	38	<l_token>(32,32#88a21ecd-bfb9-f482-8085-53daac48054c,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,38,"2016-01-06 02:17:42.805899+03",,88a21ecd-bfb9-f482-8085-53daac48054c)</l_token>
+2016-01-06 02:17:42.809273+03	4	1	38	<l_token>(32,32#88a21ecd-bfb9-f482-8085-53daac48054c,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,38,"2016-01-06 02:17:42.805899+03",,88a21ecd-bfb9-f482-8085-53daac48054c)</l_token>
+2016-01-06 02:17:42.811355+03	4	1	37	<l_token>(31,31#0e8fc585-9bbf-77ad-bc9f-40855c29d089,,1,37,"2016-01-06 02:17:42.788536+03",,0e8fc585-9bbf-77ad-bc9f-40855c29d089)</l_token>
+2016-01-06 02:24:43.052282+03	1	1	39	<l_token>(33,33#c87f6b71-35e8-b89a-762d-75fe29bc76ef,,1,39,"2016-01-06 02:24:43.050827+03",,c87f6b71-35e8-b89a-762d-75fe29bc76ef)</l_token>
+2016-01-06 02:24:43.071437+03	1	1	40	<l_token>(34,34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,40,"2016-01-06 02:24:43.070376+03",,f9e5420a-2f16-1296-f4a7-eb7e3d70c59e)</l_token>
+2016-01-06 02:24:43.086799+03	4	1	40	<l_token>(34,34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,40,"2016-01-06 02:24:43.070376+03",,f9e5420a-2f16-1296-f4a7-eb7e3d70c59e)</l_token>
+2016-01-06 02:24:43.089401+03	4	1	39	<l_token>(33,33#c87f6b71-35e8-b89a-762d-75fe29bc76ef,,1,39,"2016-01-06 02:24:43.050827+03",,c87f6b71-35e8-b89a-762d-75fe29bc76ef)</l_token>
+2016-01-06 02:30:12.135674+03	1	1	41	<l_token>(35,35#e749c61b-0daa-da66-55d2-da7affe6d025,,1,41,"2016-01-06 02:30:12.134964+03",,e749c61b-0daa-da66-55d2-da7affe6d025)</l_token>
+2016-01-06 02:30:12.151579+03	1	1	42	<l_token>(36,36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,42,"2016-01-06 02:30:12.150998+03",,b54cbbb7-fcee-d6c6-3892-43fb3d17b146)</l_token>
+2016-01-06 02:30:12.178142+03	4	1	42	<l_token>(36,36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,42,"2016-01-06 02:30:12.150998+03",,b54cbbb7-fcee-d6c6-3892-43fb3d17b146)</l_token>
+2016-01-06 02:30:12.179986+03	4	1	41	<l_token>(35,35#e749c61b-0daa-da66-55d2-da7affe6d025,,1,41,"2016-01-06 02:30:12.134964+03",,e749c61b-0daa-da66-55d2-da7affe6d025)</l_token>
 \.
 
 
@@ -5933,6 +6192,14 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 1	2016-01-02 01:57:27.326147+03	2016-01-02 01:57:27.331323+03	21
 1	2016-01-03 01:25:07.938238+03	\N	28
 1	2016-01-04 01:51:20.02965+03	\N	31
+1	2016-01-06 02:04:12.727039+03	\N	32
+1	2016-01-06 02:04:15.202962+03	\N	33
+1	2016-01-06 02:17:42.788032+03	\N	37
+25	2016-01-06 02:17:42.80454+03	\N	38
+1	2016-01-06 02:24:43.049245+03	\N	39
+25	2016-01-06 02:24:43.068885+03	\N	40
+1	2016-01-06 02:30:12.134391+03	\N	41
+25	2016-01-06 02:30:12.150434+03	\N	42
 \.
 
 
@@ -5940,7 +6207,7 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 -- Name: sec_session_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_session_id_seq', 31, true);
+SELECT pg_catalog.setval('sec_session_id_seq', 84, true);
 
 
 --
@@ -5949,6 +6216,14 @@ SELECT pg_catalog.setval('sec_session_id_seq', 31, true);
 
 COPY sec_session_log (user_id, whenstarted, whenended, id, when_logged) FROM stdin;
 1	2016-01-04 01:51:20.02965+03	\N	31	2016-01-04 01:51:20.029931+03
+1	2016-01-06 02:04:12.727039+03	\N	32	2016-01-06 02:04:12.729061+03
+1	2016-01-06 02:04:15.202962+03	\N	33	2016-01-06 02:04:15.203181+03
+1	2016-01-06 02:17:42.788032+03	\N	37	2016-01-06 02:17:42.788318+03
+25	2016-01-06 02:17:42.80454+03	\N	38	2016-01-06 02:17:42.804958+03
+1	2016-01-06 02:24:43.049245+03	\N	39	2016-01-06 02:24:43.049846+03
+25	2016-01-06 02:24:43.068885+03	\N	40	2016-01-06 02:24:43.069305+03
+1	2016-01-06 02:30:12.134391+03	\N	41	2016-01-06 02:30:12.134687+03
+25	2016-01-06 02:30:12.150434+03	\N	42	2016-01-06 02:30:12.150643+03
 \.
 
 
@@ -5962,6 +6237,14 @@ COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom,
 15	a1ef75db-9e64-e9b7-8145-19c226ed9f4b	\N	1	21	2016-01-02 01:57:27.326467+03	2016-01-02 01:57:27.330516+03	\N
 22	56780b26-c475-d68a-c922-710ff64e9f32	\N	1	28	2016-01-03 01:25:07.938485+03	\N	\N
 25	25#b82c08eb-472c-f985-1732-64d5d07639c3	\N	1	31	2016-01-04 01:51:20.030188+03	\N	b82c08eb-472c-f985-1732-64d5d07639c3
+26	26#e45c6c27-e576-ab7f-9db1-890f472bf109	\N	1	32	2016-01-06 02:04:12.731973+03	\N	e45c6c27-e576-ab7f-9db1-890f472bf109
+27	27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca	\N	1	33	2016-01-06 02:04:15.203489+03	\N	5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca
+31	31#0e8fc585-9bbf-77ad-bc9f-40855c29d089	\N	1	37	2016-01-06 02:17:42.788536+03	\N	0e8fc585-9bbf-77ad-bc9f-40855c29d089
+32	32#88a21ecd-bfb9-f482-8085-53daac48054c	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	38	2016-01-06 02:17:42.805899+03	\N	88a21ecd-bfb9-f482-8085-53daac48054c
+33	33#c87f6b71-35e8-b89a-762d-75fe29bc76ef	\N	1	39	2016-01-06 02:24:43.050827+03	\N	c87f6b71-35e8-b89a-762d-75fe29bc76ef
+34	34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	40	2016-01-06 02:24:43.070376+03	\N	f9e5420a-2f16-1296-f4a7-eb7e3d70c59e
+35	35#e749c61b-0daa-da66-55d2-da7affe6d025	\N	1	41	2016-01-06 02:30:12.134964+03	\N	e749c61b-0daa-da66-55d2-da7affe6d025
+36	36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	42	2016-01-06 02:30:12.150998+03	\N	b54cbbb7-fcee-d6c6-3892-43fb3d17b146
 \.
 
 
@@ -5969,7 +6252,7 @@ COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom,
 -- Name: sec_token_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_token_id_seq', 25, true);
+SELECT pg_catalog.setval('sec_token_id_seq', 66, true);
 
 
 --
@@ -5978,6 +6261,14 @@ SELECT pg_catalog.setval('sec_token_id_seq', 25, true);
 
 COPY sec_token_log (id, localvalue, credential, auth_path_id, session_id, validfrom, validtill, originvalue, when_logged) FROM stdin;
 25	25#b82c08eb-472c-f985-1732-64d5d07639c3	\N	1	31	2016-01-04 01:51:20.030188+03	\N	b82c08eb-472c-f985-1732-64d5d07639c3	2016-01-04 01:51:20.030506+03
+26	26#e45c6c27-e576-ab7f-9db1-890f472bf109	\N	1	32	2016-01-06 02:04:12.731973+03	\N	e45c6c27-e576-ab7f-9db1-890f472bf109	2016-01-06 02:04:12.734575+03
+27	27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca	\N	1	33	2016-01-06 02:04:15.203489+03	\N	5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca	2016-01-06 02:04:15.203818+03
+31	31#0e8fc585-9bbf-77ad-bc9f-40855c29d089	\N	1	37	2016-01-06 02:17:42.788536+03	\N	0e8fc585-9bbf-77ad-bc9f-40855c29d089	2016-01-06 02:17:42.788962+03
+32	32#88a21ecd-bfb9-f482-8085-53daac48054c	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	38	2016-01-06 02:17:42.805899+03	\N	88a21ecd-bfb9-f482-8085-53daac48054c	2016-01-06 02:17:42.806483+03
+33	33#c87f6b71-35e8-b89a-762d-75fe29bc76ef	\N	1	39	2016-01-06 02:24:43.050827+03	\N	c87f6b71-35e8-b89a-762d-75fe29bc76ef	2016-01-06 02:24:43.051806+03
+34	34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	40	2016-01-06 02:24:43.070376+03	\N	f9e5420a-2f16-1296-f4a7-eb7e3d70c59e	2016-01-06 02:24:43.07103+03
+35	35#e749c61b-0daa-da66-55d2-da7affe6d025	\N	1	41	2016-01-06 02:30:12.134964+03	\N	e749c61b-0daa-da66-55d2-da7affe6d025	2016-01-06 02:30:12.135383+03
+36	36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	42	2016-01-06 02:30:12.150998+03	\N	b54cbbb7-fcee-d6c6-3892-43fb3d17b146	2016-01-06 02:30:12.151386+03
 \.
 
 
@@ -6006,7 +6297,6 @@ COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_til
 --
 
 COPY sec_user_authcred_log (log_id, user_id, auth_path_id, credential, valid_from, valid_till, credential_hash, when_logged) FROM stdin;
-3	25	1	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	2016-01-02 01:24:55.288942+03	2016-02-02 01:24:55.288944+03	3eda716bf9f86b2d757cf72aaebfbe8b4d446c9f1b8ed6a277e3861e94f7fa20cd4de4c493e4efc48f134a0f01ad56a6222578ca68f77e091eb1934eb42779a7	2016-01-02 01:24:55.300528+03
 \.
 
 
@@ -6014,7 +6304,7 @@ COPY sec_user_authcred_log (log_id, user_id, auth_path_id, credential, valid_fro
 -- Name: sec_user_authcred_log_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 3, true);
+SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 10, true);
 
 
 --
@@ -6105,22 +6395,6 @@ ALTER TABLE ONLY env_event_status
 
 
 --
--- Name: pk_env_operation; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
---
-
-ALTER TABLE ONLY env_operation
-    ADD CONSTRAINT pk_env_operation PRIMARY KEY (id);
-
-
---
--- Name: pk_env_operation_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
---
-
-ALTER TABLE ONLY env_operation_kind
-    ADD CONSTRAINT pk_env_operation_kind PRIMARY KEY (id);
-
-
---
 -- Name: pk_env_resource; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -6190,6 +6464,38 @@ ALTER TABLE ONLY i18_currency_country
 
 ALTER TABLE ONLY i18_language
     ADD CONSTRAINT pk_i18_language01 PRIMARY KEY (id);
+
+
+--
+-- Name: pk_opn_operation; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY opn_operation
+    ADD CONSTRAINT pk_opn_operation PRIMARY KEY (id);
+
+
+--
+-- Name: pk_opn_operation_kind; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY opn_operation_kind
+    ADD CONSTRAINT pk_opn_operation_kind PRIMARY KEY (id);
+
+
+--
+-- Name: pk_opn_person01; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY opn_person
+    ADD CONSTRAINT pk_opn_person01 PRIMARY KEY (operation_id);
+
+
+--
+-- Name: pk_opn_target; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY opn_target
+    ADD CONSTRAINT pk_opn_target PRIMARY KEY (id);
 
 
 --
@@ -6409,14 +6715,6 @@ ALTER TABLE ONLY env_event_kind
 
 
 --
--- Name: fk_env_operation01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY env_operation
-    ADD CONSTRAINT fk_env_operation01 FOREIGN KEY (operation_kind_id) REFERENCES env_operation_kind(id);
-
-
---
 -- Name: fk_env_resource01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -6462,6 +6760,78 @@ ALTER TABLE ONLY i18_country_phoneprefix
 
 ALTER TABLE ONLY i18_currency_country
     ADD CONSTRAINT fk_i18_currency_country01 FOREIGN KEY (alpha3code) REFERENCES i18_currency(alpha3code);
+
+
+--
+-- Name: fk_opn_operation01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_operation
+    ADD CONSTRAINT fk_opn_operation01 FOREIGN KEY (operation_kind_id) REFERENCES opn_operation_kind(id);
+
+
+--
+-- Name: fk_opn_operation02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_operation
+    ADD CONSTRAINT fk_opn_operation02 FOREIGN KEY (modified_by) REFERENCES sec_user(id);
+
+
+--
+-- Name: fk_opn_operation03; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_operation
+    ADD CONSTRAINT fk_opn_operation03 FOREIGN KEY (applied_by) REFERENCES sec_user(id);
+
+
+--
+-- Name: fk_opn_operation_kind01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_operation_kind
+    ADD CONSTRAINT fk_opn_operation_kind01 FOREIGN KEY (operation_target_id) REFERENCES opn_target(id);
+
+
+--
+-- Name: fk_opn_person01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person
+    ADD CONSTRAINT fk_opn_person01 FOREIGN KEY (operation_id) REFERENCES opn_operation(id);
+
+
+--
+-- Name: fk_opn_person02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person
+    ADD CONSTRAINT fk_opn_person02 FOREIGN KEY (person_id) REFERENCES prs_person(id);
+
+
+--
+-- Name: fk_opn_person03; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person
+    ADD CONSTRAINT fk_opn_person03 FOREIGN KEY (citizenship_country_id) REFERENCES i18_country(id);
+
+
+--
+-- Name: fk_opn_person04; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person
+    ADD CONSTRAINT fk_opn_person04 FOREIGN KEY (language_id) REFERENCES i18_language(id);
+
+
+--
+-- Name: fk_opn_person05; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person
+    ADD CONSTRAINT fk_opn_person05 FOREIGN KEY (person_kind_id) REFERENCES prs_person_kind(id);
 
 
 --
