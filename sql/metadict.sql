@@ -39,105 +39,6 @@ COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 SET search_path = public, pg_catalog;
 
-SET default_tablespace = '';
-
-SET default_with_oids = false;
-
---
--- Name: env_event_kind; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE env_event_kind (
-    id integer NOT NULL,
-    name text,
-    class_id integer NOT NULL
-);
-
-
-ALTER TABLE public.env_event_kind OWNER TO postgres;
-
---
--- Name: COLUMN env_event_kind.id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_kind.id IS 'идентификатор события';
-
-
---
--- Name: COLUMN env_event_kind.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_kind.name IS 'наименование';
-
-
---
--- Name: COLUMN env_event_kind.class_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_kind.class_id IS 'тип класса/сущности';
-
-
---
--- Name: env_event_kind(text, text); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION env_event_kind(p_class_name text, p_event_name text) RETURNS env_event_kind
-    LANGUAGE plpgsql COST 1
-    AS $_$
-declare
-  -- ищет код события по его имени и имени класса
-  res      env_event_kind;
-begin
-  select e.*
-    into strict res
-    from env_class c,
-         env_event_kind e
-   where e.class_id = c.id
-     and c.name = p_class_name
-     and e.name = p_event_name;
-  return res;
-exception
-  when NO_DATA_FOUND then
-    -- 'ENV00002', 'event %2$s not found in class %1$s'
-    raise exception NO_DATA_FOUND using message = env_resource_text_format('ENV00002', p_class_name, p_event_name);
-    --execute env_raise_exception('P0002', 'ENV00002', p_class_name, p_event_name);
-  when TOO_MANY_ROWS then
-    -- 'ENV00003', 'event %2$s not unique in class %1$s'
-    raise exception TOO_MANY_ROWS using message = env_resource_text_format('ENV00003', p_class_name, p_event_name);
-    --execute env_raise_exception('23505', 'ENV00003', p_class_name, p_event_name);
-end;
-$_$;
-
-
-ALTER FUNCTION public.env_event_kind(p_class_name text, p_event_name text) OWNER TO postgres;
-
---
--- Name: env_event_status(); Type: FUNCTION; Schema: public; Owner: postgres
---
-
-CREATE FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) RETURNS record
-    LANGUAGE plpgsql IMMUTABLE COST 1
-    AS $$
-begin
-  -- возвращает константные значения статусов событий
-  -- STARTED, PROCESSED, ENDED
-  "STARTED" := 1;
-  "PROCESSING" := 2;
-  "ENDED" := 3;
-  return;
-end;
-$$;
-
-
-ALTER FUNCTION public.env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) OWNER TO postgres;
-
---
--- Name: FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint); Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON FUNCTION env_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) IS 'возвращает константные значения статусов событий';
-
-
 --
 -- Name: env_raise_exception(text, text, text, text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
@@ -203,6 +104,10 @@ ALTER FUNCTION public.env_raise_exception(p_level integer, p_errcode text, res_c
 
 COMMENT ON FUNCTION env_raise_exception(p_level integer, p_errcode text, res_code text, param01 text, param02 text, param03 text, param04 text, param05 text) IS 'возбуждает исключение или создает сообщение другого указанного уровня важности с текстом, заданным по коду сообщения';
 
+
+SET default_tablespace = '';
+
+SET default_with_oids = false;
 
 --
 -- Name: i18_language; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
@@ -875,6 +780,101 @@ COMMENT ON FUNCTION i18_language_find_by_a3c(p_alpha3code character) IS 'воз�
 
 
 --
+-- Name: lml_event; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE lml_event (
+    id integer NOT NULL,
+    name text,
+    class_id integer NOT NULL
+);
+
+
+ALTER TABLE public.lml_event OWNER TO postgres;
+
+--
+-- Name: COLUMN lml_event.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN lml_event.id IS 'идентификатор события';
+
+
+--
+-- Name: COLUMN lml_event.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN lml_event.name IS 'наименование';
+
+
+--
+-- Name: COLUMN lml_event.class_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN lml_event.class_id IS 'тип класса/сущности';
+
+
+--
+-- Name: lml_event(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION lml_event(p_class_name text, p_event_name text) RETURNS lml_event
+    LANGUAGE plpgsql COST 1
+    AS $_$
+declare
+  -- ищет код события по его имени и имени класса
+  res      lml_event;
+begin
+  select e.*
+    into strict res
+    from lml_class c,
+         lml_event e
+   where e.class_id = c.id
+     and c.name = p_class_name
+     and e.name = p_event_name;
+  return res;
+exception
+  when NO_DATA_FOUND then
+    -- 'ENV00002', 'event %2$s not found in class %1$s'
+    raise exception NO_DATA_FOUND using message = env_resource_text_format('ENV00002', p_class_name, p_event_name);
+    --execute env_raise_exception('P0002', 'ENV00002', p_class_name, p_event_name);
+  when TOO_MANY_ROWS then
+    -- 'ENV00003', 'event %2$s not unique in class %1$s'
+    raise exception TOO_MANY_ROWS using message = env_resource_text_format('ENV00003', p_class_name, p_event_name);
+    --execute env_raise_exception('23505', 'ENV00003', p_class_name, p_event_name);
+end;
+$_$;
+
+
+ALTER FUNCTION public.lml_event(p_class_name text, p_event_name text) OWNER TO postgres;
+
+--
+-- Name: lml_event_status(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION lml_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) RETURNS record
+    LANGUAGE plpgsql IMMUTABLE COST 1
+    AS $$
+begin
+  -- возвращает константные значения статусов событий
+  -- STARTED, PROCESSED, ENDED
+  "STARTED" := 1;
+  "PROCESSING" := 2;
+  "ENDED" := 3;
+  return;
+end;
+$$;
+
+
+ALTER FUNCTION public.lml_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) OWNER TO postgres;
+
+--
+-- Name: FUNCTION lml_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION lml_event_status(OUT "STARTED" smallint, OUT "PROCESSING" smallint, OUT "ENDED" smallint) IS 'возвращает константные значения статусов событий';
+
+
+--
 -- Name: mdd_class_del(bigint); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1177,7 +1177,7 @@ begin
   -- проверка полномочий на выполнение операции
   perform sec_session_require_permission(p_session_id, 'sec_authentication_kind.add');
   -- регистрируем событие
-  perform sec_event_start(p_session_id, 'sec_authentication_kind', 'add', xmlforest(p_row));
+  perform sec_event_log_start(p_session_id, 'sec_authentication_kind', 'add', xmlforest(p_row));
   -- добавляем строку
   p_row.id := coalesce(p_row.id, nextval('sec_authentication_kind_id_seq'::regclass));
   insert into sec_authentication_kind 
@@ -1282,7 +1282,7 @@ begin
   -- проверка полномочий на выполнение операции
   perform sec_session_require_permission(p_session_id, 'sec_authentication_kind.del');
   -- регистрируем событие
-  perform sec_event_start(p_session_id, 'sec_authentication_kind', 'del', xmlforest(p_row));
+  perform sec_event_log_start(p_session_id, 'sec_authentication_kind', 'del', xmlforest(p_row));
   -- удаляем строку
   delete from sec_authentication_kind 
    where id = p_row.id
@@ -1314,7 +1314,7 @@ begin
   -- проверка полномочий на выполнение операции
   perform sec_session_require_permission(p_session_id, 'sec_authentication_kind.upd');
   -- регистрируем событие
-  perform sec_event_start(p_session_id, 'sec_authentication_kind', 'upd', xmlforest(p_row));
+  perform sec_event_log_start(p_session_id, 'sec_authentication_kind', 'upd', xmlforest(p_row));
   -- обновляем строку
   update sec_authentication_kind 
      set name = p_row.name,
@@ -1408,69 +1408,86 @@ COMMENT ON FUNCTION sec_authentication_path_by_id(p_auth_path_id integer) IS 'в
 
 
 --
--- Name: sec_event; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+-- Name: sec_event_log; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
-CREATE TABLE sec_event (
+CREATE TABLE sec_event_log (
     whenfired timestamp with time zone NOT NULL,
     event_kind integer NOT NULL,
     event_status integer NOT NULL,
     session_id integer NOT NULL,
-    context xml
+    context xml,
+    user_name text,
+    auth_path_id integer,
+    tokenvalue text
 );
 
 
-ALTER TABLE public.sec_event OWNER TO postgres;
+ALTER TABLE public.sec_event_log OWNER TO postgres;
 
 --
--- Name: COLUMN sec_event.whenfired; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN sec_event_log.whenfired; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN sec_event.whenfired IS 'дата/вермя начала события';
-
-
---
--- Name: COLUMN sec_event.event_kind; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_event.event_kind IS 'тип события';
+COMMENT ON COLUMN sec_event_log.whenfired IS 'дата/вермя начала события';
 
 
 --
--- Name: COLUMN sec_event.event_status; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN sec_event_log.event_kind; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN sec_event.event_status IS 'статус события';
-
-
---
--- Name: COLUMN sec_event.session_id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN sec_event.session_id IS 'идентификатор сессии';
+COMMENT ON COLUMN sec_event_log.event_kind IS 'тип события';
 
 
 --
--- Name: COLUMN sec_event.context; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN sec_event_log.event_status; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN sec_event.context IS 'контекст (аттрибуты, параметры) события';
+COMMENT ON COLUMN sec_event_log.event_status IS 'статус события';
 
 
 --
--- Name: sec_event_start(integer, text, text, xml); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: COLUMN sec_event_log.session_id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml DEFAULT NULL::xml) RETURNS sec_event
+COMMENT ON COLUMN sec_event_log.session_id IS 'идентификатор сессии';
+
+
+--
+-- Name: COLUMN sec_event_log.context; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event_log.context IS 'контекст (аттрибуты, параметры) события';
+
+
+--
+-- Name: COLUMN sec_event_log.user_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event_log.user_name IS 'имя учетной записи';
+
+
+--
+-- Name: COLUMN sec_event_log.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_event_log.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: sec_event_log_start(integer, text, text, xml, text, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_event_log_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml DEFAULT NULL::xml, p_user_name text DEFAULT NULL::text, p_auth_path_id integer DEFAULT NULL::integer, p_tokenvalue text DEFAULT NULL::text) RETURNS sec_event_log
     LANGUAGE plpgsql COST 3
     AS $$
 declare
   -- регистрирует начало события с указанным именем и именем класса
-  res  sec_event;
+  res  sec_event_log;
 begin
 --  BEGIN SUBTRANSACTION;
-  insert into sec_event (session_id, whenfired, event_kind, event_status, context)
-  values (p_session_id, clock_timestamp(), (env_event_kind(p_class_name, p_event_name)).id, (env_event_status())."STARTED", p_context)
+  insert into sec_event_log (session_id, whenfired, event_kind, event_status, context, user_name, auth_path_id, tokenvalue)
+  values (p_session_id, clock_timestamp(), (lml_event(p_class_name, p_event_name)).id, (lml_event_status())."STARTED", p_context, p_user_name, p_auth_path_id, p_tokenvalue)
   returning * into res;
 --  COMMIT SUBTRANSACTION;
   return res;
@@ -1478,13 +1495,13 @@ end;
 $$;
 
 
-ALTER FUNCTION public.sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml) OWNER TO postgres;
+ALTER FUNCTION public.sec_event_log_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml, p_user_name text, p_auth_path_id integer, p_tokenvalue text) OWNER TO postgres;
 
 --
--- Name: FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml); Type: COMMENT; Schema: public; Owner: postgres
+-- Name: FUNCTION sec_event_log_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml, p_user_name text, p_auth_path_id integer, p_tokenvalue text); Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON FUNCTION sec_event_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml) IS 'регистрирует начало события с указанным именем и именем класса';
+COMMENT ON FUNCTION sec_event_log_start(p_session_id integer, p_class_name text, p_event_name text, p_context xml, p_user_name text, p_auth_path_id integer, p_tokenvalue text) IS 'регистрирует начало события с указанным именем и именем класса';
 
 
 --
@@ -1574,7 +1591,7 @@ COMMENT ON COLUMN sec_token.originvalue IS 'исходное оригиналь�
 
 CREATE FUNCTION sec_login(p_tokenvalue text, p_auth_path_id integer, p_user_name text) RETURNS sec_token
     LANGUAGE plpgsql COST 10
-    AS $$declare
+    AS $_$declare
   -- регистрация токена, предоставленного доверенным источником аутентификации. возвращает зарегистрированный токен безопасности. если пользователь не найден, возвращает null.
   l_user     sec_user;
   l_uac      sec_user_authcred;
@@ -1598,20 +1615,20 @@ begin
     insert into sec_token_log (id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
     values (l_token.id, l_token.originvalue, l_token.localvalue, l_token.credential, l_token.auth_path_id, l_token.session_id, l_token.validfrom, l_token.validtill, clock_timestamp());
     -- регистрируем событие логина
-    perform sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
+    perform sec_event_log_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token), p_user_name, p_auth_path_id);
     -- возвращаем строку токена
     return l_token;
   else 
     -- учетная запись не найдена
     -- регистрируем событие неудачной попытки логина
     l_session.id := nextval('sec_session_id_seq');
-    perform sec_event_start(l_session.id, 'sec_session', 'login_failed');
+    perform sec_event_log_start(l_session.id, 'sec_session', 'login_failed', xml(format('<user_name>%1$s</user_name><auth_path_id>%2$s</auth_path_id><tokenvalue>%3$s</tokenvalue>', p_user_name, p_auth_path_id, p_tokenvalue)), p_user_name, p_auth_path_id, p_tokenvalue);
     -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
     raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
     return null;
   end if;
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION public.sec_login(p_tokenvalue text, p_auth_path_id integer, p_user_name text) OWNER TO postgres;
@@ -1629,7 +1646,7 @@ COMMENT ON FUNCTION sec_login(p_tokenvalue text, p_auth_path_id integer, p_user_
 
 CREATE FUNCTION sec_login(p_user_name text, p_credential text, p_auth_path_id integer DEFAULT NULL::integer) RETURNS sec_token
     LANGUAGE plpgsql COST 10
-    AS $$declare
+    AS $_$declare
   -- аутентификация. возвращает токен безопасности, если аутентификация выполнена успешно. в противном случае возвращает NULL
   l_uac      sec_user_authcred;
   l_session  sec_session;
@@ -1652,20 +1669,21 @@ begin
     insert into sec_token_log (id, originvalue, localvalue, credential, auth_path_id, session_id, validfrom, validtill, when_logged)
     values (l_token.id, l_token.originvalue, l_token.localvalue, l_token.credential, l_token.auth_path_id, l_token.session_id, l_token.validfrom, l_token.validtill, clock_timestamp());
     -- регистрируем событие логина
-    perform sec_event_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token));
+    perform sec_event_log_start(l_session.id, 'sec_session', 'login_succeded', xmlforest(l_token), p_user_name, p_auth_path_id);
     -- возвращаем строку токена
     return l_token;
   else 
     -- учетные данные не приняты
     -- регистрируем событие неудачной попытки логина
     l_session.id := nextval('sec_session_id_seq');
-    perform sec_event_start(l_session.id, 'sec_session', 'login_failed');
+    perform sec_event_log_start(l_session.id, 'sec_session', 'login_failed', xml(format('<user_name>%1$s</user_name><auth_path_id>%2$s</auth_path_id><credential>%3$s</credential>', p_user_name, p_auth_path_id, p_credential)), p_user_name, p_auth_path_id, p_credential);
     -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
     raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
+    
     return null;
   end if;
 end;
-$$;
+$_$;
 
 
 ALTER FUNCTION public.sec_login(p_user_name text, p_credential text, p_auth_path_id integer) OWNER TO postgres;
@@ -1687,18 +1705,21 @@ CREATE FUNCTION sec_logout(p_tokenvalue text) RETURNS sec_token
   -- завершает сессию с указанным токеном. возвращает строку токена, если сессия завершена успешно. в противном случае возвращает null
   l_token    sec_token; -- токен
   l_session  sec_session; -- сессия
+  l_user     sec_user; -- учетная запись
 begin
   -- проверка действительности токена
   select * into l_token from sec_token_valid(p_tokenvalue);
   if (found) then
     -- токен действителен, завершаем его
-    l_token := sec_token_stale(l_token);
+    l_token := sec_token_stale(l_token, true);
     -- проверка действительности сессии
     l_session := sec_session_valid(l_token.session_id);
+    -- учетная запись сессии
+    l_user := sec_user_by_id(l_session.user_id);
     -- сессия действительна, завершаем её
-    l_session := sec_session_stale(l_session);
+    l_session := sec_session_stale(l_session, true);
     -- регистрируем событие логаута
-    perform sec_event_start(l_token.session_id, 'sec_session', 'logout_succeded', xmlforest(l_token));
+    perform sec_event_log_start(l_token.session_id, 'sec_session', 'logout_succeded', xmlforest(l_token), l_user.name, l_token.auth_path_id, p_tokenvalue);
     -- возвращаем строку токена
     return l_token;
   else 
@@ -2286,8 +2307,8 @@ begin
     into STRICT res
     from sec_user_authcred
    where user_id = p_user_id
-     and auth_path_id = p_auth_path_id
-     and (clock_timestamp() between valid_from and valid_till); --срок действия учетных данных
+     and auth_path_id = p_auth_path_id;
+     --and (clock_timestamp() between valid_from and valid_till); --срок действия учетных данных
    return res;
 exception
   when NO_DATA_FOUND then
@@ -2389,26 +2410,29 @@ begin
         from sec_user_authcred_log cl
        where cl.user_id = p_user_id 
          and cl.auth_path_id = l_uac.auth_path_id
-         and cl.credential_hash <> sec_user_authcred_hash(p_session_id, p_credential, l_uac.auth_path_id)
+         and cl.credential_hash <> sec_user_authcred_hash(p_session_id, p_user_id, p_credential, l_uac.auth_path_id)
          and cl.when_logged > clock_timestamp() - l_min_cred_age -- сколько дней нельзя менять учетные данные
        order by cl.when_logged desc
        limit 1;
       if (found) then -- учетные данные менялись в течении послених N дней
         -- 'SEC00023', 'credential must not be changed "%1$s" after previos changes at "%2$s"'
-        return env_resource_text_find_by_code('SEC00023', l_min_cred_age, moment);
+        return env_resource_text_find_by_code('SEC00023');
       end if;
       -- поиск совпадений новых учетных данных со старыми во всей истории из 
       -- журнала изменений учетных данных или с ограничением глубины анализа истории
       -- TODO: переделать. надо считать кол-во смен паролей, а не кол-во строк
-      select 1 
-        from sec_user_authcred_log cl
-       where cl.user_id = p_user_id 
-         and cl.auth_path_id = l_uac.auth_path_id
-         and cl.credential_hash = sec_user_authcred_hash(p_session_id, p_credential, l_uac.auth_path_id)
-         and cl.when_logged > clock_timestamp() - l_max_cred_age -- сколько дней нельзя использовать такие-же учетные данные
-       order by cl.when_logged
-       limit l_authcred_log_depth; -- глубина просмотра журнала истории
-      if (found) then -- совпадения найдены
+      select count(1)
+        into res
+        from (
+              select row_number() over (order by cl.when_logged desc) as rn
+                from sec_user_authcred_log cl
+               where cl.user_id = p_user_id 
+                 and cl.auth_path_id = l_uac.auth_path_id
+                 and cl.credential_hash = sec_user_authcred_hash(p_session_id, p_user_id, p_credential, l_uac.auth_path_id)
+                 and cl.when_logged > clock_timestamp() - l_max_cred_age -- сколько дней нельзя использовать такие-же учетные данные
+             ) s
+       where rn < l_authcred_log_depth; -- глубина просмотра журнала истории
+      if (res > 0) then -- совпадения найдены
         return env_resource_text_find_by_code('-----');
       end if;
 
@@ -2533,42 +2557,81 @@ COMMENT ON FUNCTION sec_user_authcred_hash(p_session_id integer, p_user_id integ
 
 
 --
+-- Name: sec_user_authcred_is_valid(integer, sec_user_authcred); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION sec_user_authcred_is_valid(p_session_id integer, p_uac sec_user_authcred) RETURNS boolean
+    LANGUAGE plpgsql STABLE COST 5
+    AS $$declare
+  -- проверка периода действия учетных данных
+  l_session  sec_session; -- текущая сессия
+  l_user     sec_user;
+  ok         boolean;
+begin
+  -- текущая сессия
+  select * into l_session from sec_session_valid(p_session_id);
+  --наличие полномочий на операцию с чужими учетными данными или на свои
+  select sec_session_has_permission(p_session_id, 'sec_user_authcred.is_valid') or (l_session.user_id = p_uac.user_id) into ok;
+  if (not ok) then
+    -- 'SEC00004', 'access denied. has no permission (%s)'
+    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user_authcred.is_valid');
+  end if;
+  return (clock_timestamp() between p_uac.valid_from and p_uac.valid_till); --срок действия учетных данных
+end;
+$$;
+
+
+ALTER FUNCTION public.sec_user_authcred_is_valid(p_session_id integer, p_uac sec_user_authcred) OWNER TO postgres;
+
+--
+-- Name: FUNCTION sec_user_authcred_is_valid(p_session_id integer, p_uac sec_user_authcred); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION sec_user_authcred_is_valid(p_session_id integer, p_uac sec_user_authcred) IS 'проверка периода действия учетных данных';
+
+
+--
 -- Name: sec_user_authcred_reset(integer, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_user_authcred_reset(p_session_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) RETURNS boolean
+CREATE FUNCTION sec_user_authcred_reset(p_session_id integer, p_old_credential text, p_credential text, p_auth_path_id integer) RETURNS integer
     LANGUAGE plpgsql COST 30
     AS $$declare
   -- смена своих учетных данных (пароля)
   l_session  sec_session; -- текущая сессия
   l_uac      sec_user_authcred;
-  ok         boolean;
+  ok_res     integer;
+  res        integer;
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
   -- проверка текущих учетных данных
   select * into l_uac from sec_user_authcred_accepted(l_session.user_id, p_old_credential, p_auth_path_id) limit 1;
-  ok := found;
-  if (ok) then
-    -- наличие полномочий на смену своих учетных данных
-    select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset') into ok;
-    -- TODO: проверка соответствия политике учетных данных
-    -- sec_user_authcred_comply_policy(p_session_id, l_session.user_id, p_old_credential, p_credential, p_auth_path_id);
-    if (ok) then -- полномочий достаточно
-      -- сохраняем текщие учетные данные в журнал изменений
-      insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
-      values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
-      -- меняем учетные данные
-      update sec_user_authcred acr
-         set credential = sec_user_authcred_encrypt(user_id, p_credential, auth_path_id),
-             credential_hash = sec_user_authcred_hash(l_session, p_credential, p_auth_path_id)
-       where user_id = l_session.user_id
-         and auth_path_id = p_auth_path_id;
-      -- если учетные данные изменены
-      ok := found;
+  if (found) then
+    -- наличие полномочий на смену своих учетных данных. если нет - исключение
+    perform sec_session_require_permission(p_session_id, 'sec_user_authcred.reset');
+    ok_res := env_resource_text_find_by_code('ANY00001');
+    -- проверка соответствия политике учетных данных
+    res := sec_user_authcred_comply_policy(p_session_id, l_session.user_id, p_old_credential, p_credential, p_auth_path_id);
+    if (res <> ok_res) then
+      --raise exception NO_DATA_FOUND using message = 'sec_user_authcred_comply_policy() failed. res='||res::text;
+      return res;
     end if;
+    -- сохраняем текщие учетные данные в журнал изменений
+    insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
+    values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
+    -- меняем учетные данные
+    update sec_user_authcred acr
+       set credential = sec_user_authcred_encrypt(l_session.id, l_session.user_id, p_credential, auth_path_id),
+           credential_hash = sec_user_authcred_hash(l_session.id, l_session.user_id, p_credential, p_auth_path_id)
+     where user_id = l_session.user_id
+       and auth_path_id = p_auth_path_id;
+    -- если учетные данные изменены
+    return ok_res;
+  else
+    -- "SEC00007", "wrong or unknown username (%s) or credential/authentication path"
+    return env_resource_text_find_by_code('SEC00007');
   end if;
-  return ok;
 end;
 $$;
 
@@ -2586,7 +2649,7 @@ COMMENT ON FUNCTION sec_user_authcred_reset(p_session_id integer, p_old_credenti
 -- Name: sec_user_authcred_reset_any(integer, text, text, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION sec_user_authcred_reset_any(p_session_id integer, p_user_name text, p_credential text, p_auth_path_id integer) RETURNS boolean
+CREATE FUNCTION sec_user_authcred_reset_any(p_session_id integer, p_user_name text, p_credential text, p_auth_path_id integer) RETURNS integer
     LANGUAGE plpgsql COST 30
     AS $$declare
   -- смена учетных данных (p_credential) для указанной учетной записи (p_user_name)
@@ -2594,6 +2657,8 @@ CREATE FUNCTION sec_user_authcred_reset_any(p_session_id integer, p_user_name te
   l_user     sec_user; -- учетная запись, для которого меняются учетные данные
   ok         boolean;
   l_uac      sec_user_authcred;
+  ok_res     integer;
+  res        integer;
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
@@ -2601,24 +2666,31 @@ begin
   select * into l_user from sec_user_by_name(p_user_name);
   --наличие полномочий на смену чужих учетных данных или попытка сменить свои
   select sec_session_has_permission(p_session_id, 'sec_user_authcred.reset_any') or (l_session.user_id = l_user.id) into ok;
-  if (ok) then -- полномочий достаточно
-    l_uac := sec_user_authcred_by_pk(l_user.id, p_auth_path_id);
-    -- сохраняем текщие учетные данные в журнал изменений
-    insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
-    values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
-    -- TODO: написать проверку политики учетных данных и вызвать её здесь
-    -- меняем учетные данные
-    update sec_user_authcred
-       set credential = sec_user_authcred_encrypt(l_session.id, user_id, p_credential, auth_path_id),
-           credential_hash = sec_user_authcred_hash(l_session.id, user_id, p_credential, p_auth_path_id)
-     where user_id = l_user.id
-       and auth_path_id = l_uac.auth_path_id;
-    -- если учетные данные изменены
-    ok := found;
-  else
-    raise WARNING 'This is not you session or you has no permission (%) to change other`s credential', 'sec_user_authcred.reset_any';
+  if (not ok) then -- полномочий не достаточно
+    raise WARNING insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user_authcred.reset_any');
+    return env_resource_text_find_by_code('SEC00004');
   end if;
-  return ok;
+  l_uac := sec_user_authcred_by_pk(l_user.id, p_auth_path_id);
+  ok_res := env_resource_text_find_by_code('ANY00001');
+  -- проверка соответствия политике учетных данных НЕ НУЖНА, если сброс учетных данных выполняет админ
+  /*
+  res := sec_user_authcred_comply_policy(p_session_id, l_user.id, p_old_credential, p_credential, p_auth_path_id);
+  if (res <> ok_res) then
+    --raise exception NO_DATA_FOUND using message = 'sec_user_authcred_comply_policy() failed. res='||res::text;
+    return res;
+  end if;
+  */
+  -- сохраняем текщие учетные данные в журнал изменений
+  insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
+  values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
+  -- меняем учетные данные
+  update sec_user_authcred
+     set credential = sec_user_authcred_encrypt(l_session.id, l_user.id, p_credential, auth_path_id),
+         credential_hash = sec_user_authcred_hash(l_session.id, l_user.id, p_credential, p_auth_path_id)
+   where user_id = l_user.id
+     and auth_path_id = l_uac.auth_path_id;
+  -- если учетные данные изменены
+  return ok_res;
 end;
 $$;
 
@@ -2637,7 +2709,7 @@ COMMENT ON FUNCTION sec_user_authcred_reset_any(p_session_id integer, p_user_nam
 --
 
 CREATE FUNCTION sec_user_authcred_set_valid_period(p_session_id integer, p_user_id integer, p_auth_path_id integer, p_valid_from timestamp with time zone, p_valid_till timestamp with time zone) RETURNS sec_user_authcred
-    LANGUAGE plpgsql STABLE COST 5
+    LANGUAGE plpgsql COST 5
     AS $$declare
   -- блокировка указанных учетных данных.
   l_session  sec_session; -- текущая сессия
@@ -2647,23 +2719,19 @@ CREATE FUNCTION sec_user_authcred_set_valid_period(p_session_id integer, p_user_
 begin
   -- текущая сессия
   select * into l_session from sec_session_valid(p_session_id);
-  -- проверка наличия полномочий
-  ok := sec_session_has_permission(p_session_id, 'sec_user_authcred.set_valid_period');
-  if (not ok) then -- полномочий нет
-    -- 'SEC00004', 'access denied. has no permission (%s)'
-    raise exception insufficient_privilege using message = env_resource_text_format('SEC00004', 'sec_user_authcred.set_valid_period');
-  end if;
+  -- проверка наличия полномочий. если полномочий нет, - ошибка
+  perform sec_session_require_permission(p_session_id, 'sec_user_authcred.set_valid_period');
   -- полномочий достаточно
   l_user := sec_user_by_id(p_user_id);
-  l_uac := sec_user_authcred_by_pk(l_user.user_id, p_auth_path_id);
+  l_uac := sec_user_authcred_by_pk(l_user.id, p_auth_path_id);
   -- сохраняем текщие учетные данные в журнал изменений
   insert into sec_user_authcred_log (log_id, when_logged, user_id, auth_path_id, credential, credential_hash, valid_from, valid_till)
   values (default, clock_timestamp(), l_uac.user_id, l_uac.auth_path_id, l_uac.credential, l_uac.credential_hash, l_uac.valid_from, l_uac.valid_till);
   -- ограничиваем срок действия указанных учетных данных
   update sec_user_authcred acr
-     set valid_from = coalesce(p_valid_from, valid_from, now),
-         valid_till = coalesce(p_valid_till, valid_till, now)
-   where user_id = l_user.user_id
+     set valid_from = coalesce(p_valid_from, valid_from),
+         valid_till = coalesce(p_valid_till, valid_till)
+   where user_id = l_user.id
      and auth_path_id = p_auth_path_id
   returning * into l_uac;
   return l_uac;
@@ -2843,7 +2911,7 @@ begin
   values (l_user.id, p_auth_path_id, null, null, clock_timestamp(), clock_timestamp()+interval '1 month')
   returning * into l_uac;
   -- регистрируем событие
-  perform sec_event_start(p_session_id, 'sec_user', 'create', xmlforest(l_user));
+  perform sec_event_log_start(p_session_id, 'sec_user', 'create', xmlforest(l_user));
   -- проверка учетных данных (пароля) на соответствие политике. 
   /*
   select * into res from sec_user_authcred_comply_policy(p_session_id, l_user.id, null, p_credential, p_auth_path_id);
@@ -2960,11 +3028,17 @@ begin
   -- создаем сессию юзера
   l_token := sec_login(c_user_name, c_credential, l_ap.id);
   if (l_token is null) then
+    raise warning NO_DATA_FOUND using message = 'sec_login failed. resulted token is NULL';
     -- сброс своего пароля
     if (not sec_user_authcred_reset_any(l_root_session.id, c_user_name, c_credential, l_ap.id)) then
       raise exception NO_DATA_FOUND using message = 'authcred NOT reseted';
     end if;
     l_token := sec_login(c_user_name, c_credential, l_ap.id);
+  end if;
+  if (l_token is null) then
+    raise notice 'sec_login failed. resulted token is NULL';
+  else
+    raise notice 'sec_login succeded. resulted token is NOT NULL';
   end if;
   -- проверяем валидность созданной сессии
   l_session := sec_session_valid(l_token.session_id);
@@ -2984,16 +3058,28 @@ begin
   if (l_ok is null) then
     raise exception NO_DATA_FOUND using message = 'env_resource_text_find_by_code failed to find resource with code "ANY00001"';
   end if;
-  -- проверка на соответствие политике учетных данных
-  /*
-  select * into l_res from sec_user_authcred_comply_policy(l_session.id, l_session.user_id, null, c_credential, l_token.auth_path_id);
-  if (l_res <> l_ok) then
-    raise exception NO_DATA_FOUND using message = 'authcred NOT comply policy. result code = '|| l_res::text;
+  -- проверка на некорректные учетные данные
+  select count(*) into l_cnt from sec_user_authcred_accepted(c_user_name, '-'||c_credential||'+', l_token.auth_path_id);
+  if (l_cnt = 0) then
+    raise notice 'wrong user_authcred not accepted';
+  else 
+    raise exception 'wrong user_authcred ACCEPTED';
   end if;
-  */
 
-  -- блокировка 
-  select * into l_uac from sec_user_authcred_set_valid_period(l_root_session.id, l_uac.user_id, l_uac.auth_path_id, yesterday, today);
+  -- период действия учетных данных - до сегодняшней полуночи
+  select * into l_uac from sec_user_authcred_set_valid_period(l_root_session.id, l_uac.user_id, l_uac.auth_path_id, 'yesterday', 'today');
+  -- проверка учетных данных при аутентификации
+  select count(*) into l_cnt from sec_user_authcred_accepted(c_user_name, c_credential, l_token.auth_path_id);
+  if (l_cnt = 0) then
+    raise notice 'block out user_authcred. authcred not accepted';
+  end if;
+  -- период действия учетных данных - c сегодняшней полуночи до бексонечности
+  select * into l_uac from sec_user_authcred_set_valid_period(l_root_session.id, l_uac.user_id, l_uac.auth_path_id, 'today', 'infinity');
+  -- проверка учетных данных при аутентификации
+  select count(*) into l_cnt from sec_user_authcred_accepted(c_user_name, c_credential, l_token.auth_path_id);
+  if (l_cnt = 0) then
+    raise exception 'unblock user_authcred. authcred NOT accepted';
+  end if;
     -- завершаем сессию юзера
   l_token := sec_logout(l_token.localvalue);
   -- завершаем сессию админа
@@ -3111,121 +3197,6 @@ COMMENT ON COLUMN env_application_relation.id IS 'id приложения, по�
 --
 
 COMMENT ON COLUMN env_application_relation.related_to_id IS 'id приложения, с которым связано данное';
-
-
---
--- Name: env_class; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE env_class (
-    id integer NOT NULL,
-    name text
-);
-
-
-ALTER TABLE public.env_class OWNER TO postgres;
-
---
--- Name: TABLE env_class; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE env_class IS 'типы сущностей, классы объектов приложения и предметной области';
-
-
---
--- Name: COLUMN env_class.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_class.name IS 'наименование';
-
-
---
--- Name: env_class_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE env_class_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.env_class_id_seq OWNER TO postgres;
-
---
--- Name: env_class_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE env_class_id_seq OWNED BY env_class.id;
-
-
---
--- Name: env_event_kind_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE env_event_kind_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.env_event_kind_id_seq OWNER TO postgres;
-
---
--- Name: env_event_kind_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE env_event_kind_id_seq OWNED BY env_event_kind.id;
-
-
---
--- Name: env_event_status; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE env_event_status (
-    id integer NOT NULL,
-    name text
-);
-
-
-ALTER TABLE public.env_event_status OWNER TO postgres;
-
---
--- Name: TABLE env_event_status; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE env_event_status IS 'статус события';
-
-
---
--- Name: COLUMN env_event_status.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN env_event_status.name IS 'наименование события';
-
-
---
--- Name: env_event_status_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE env_event_status_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.env_event_status_id_seq OWNER TO postgres;
-
---
--- Name: env_event_status_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE env_event_status_id_seq OWNED BY env_event_status.id;
 
 
 --
@@ -3491,6 +3462,121 @@ ALTER SEQUENCE i18_language_id_seq OWNED BY i18_language.id;
 
 
 --
+-- Name: lml_class; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE lml_class (
+    id integer NOT NULL,
+    name text
+);
+
+
+ALTER TABLE public.lml_class OWNER TO postgres;
+
+--
+-- Name: TABLE lml_class; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE lml_class IS 'типы сущностей, классы объектов приложения и предметной области';
+
+
+--
+-- Name: COLUMN lml_class.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN lml_class.name IS 'наименование';
+
+
+--
+-- Name: lml_class_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE lml_class_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.lml_class_id_seq OWNER TO postgres;
+
+--
+-- Name: lml_class_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE lml_class_id_seq OWNED BY lml_class.id;
+
+
+--
+-- Name: lml_event_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE lml_event_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.lml_event_id_seq OWNER TO postgres;
+
+--
+-- Name: lml_event_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE lml_event_id_seq OWNED BY lml_event.id;
+
+
+--
+-- Name: lml_event_status; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE lml_event_status (
+    id integer NOT NULL,
+    name text
+);
+
+
+ALTER TABLE public.lml_event_status OWNER TO postgres;
+
+--
+-- Name: TABLE lml_event_status; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE lml_event_status IS 'статус события';
+
+
+--
+-- Name: COLUMN lml_event_status.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN lml_event_status.name IS 'наименование события';
+
+
+--
+-- Name: lml_event_status_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE lml_event_status_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.lml_event_status_id_seq OWNER TO postgres;
+
+--
+-- Name: lml_event_status_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE lml_event_status_id_seq OWNED BY lml_event_status.id;
+
+
+--
 -- Name: mdd_datatype; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -3687,7 +3773,7 @@ ALTER SEQUENCE opn_operation_id_seq OWNED BY opn_operation.id;
 CREATE TABLE opn_operation_kind (
     id integer NOT NULL,
     name character varying(255),
-    operation_target_id integer NOT NULL
+    class_id integer NOT NULL
 );
 
 
@@ -3715,10 +3801,10 @@ COMMENT ON COLUMN opn_operation_kind.name IS 'наименование';
 
 
 --
--- Name: COLUMN opn_operation_kind.operation_target_id; Type: COMMENT; Schema: public; Owner: postgres
+-- Name: COLUMN opn_operation_kind.class_id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN opn_operation_kind.operation_target_id IS 'код целевого объекта для операции';
+COMMENT ON COLUMN opn_operation_kind.class_id IS 'код целевого класса объекта для операции';
 
 
 --
@@ -3797,68 +3883,6 @@ COMMENT ON COLUMN opn_person.language_id IS 'родной (основной) я�
 --
 
 COMMENT ON COLUMN opn_person.person_kind_id IS 'тип персоны';
-
-
---
--- Name: opn_target; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
---
-
-CREATE TABLE opn_target (
-    id integer NOT NULL,
-    name character varying(255),
-    table_name character varying(64)
-);
-
-
-ALTER TABLE public.opn_target OWNER TO postgres;
-
---
--- Name: TABLE opn_target; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE opn_target IS 'целевые объекты для бизнес-операций';
-
-
---
--- Name: COLUMN opn_target.id; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN opn_target.id IS 'идентификатор';
-
-
---
--- Name: COLUMN opn_target.name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN opn_target.name IS 'наименование целевого объекта для операции';
-
-
---
--- Name: COLUMN opn_target.table_name; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN opn_target.table_name IS 'наименование таблицы';
-
-
---
--- Name: opn_target_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
---
-
-CREATE SEQUENCE opn_target_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE public.opn_target_id_seq OWNER TO postgres;
-
---
--- Name: opn_target_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
---
-
-ALTER SEQUENCE opn_target_id_seq OWNED BY opn_target.id;
 
 
 --
@@ -4295,27 +4319,6 @@ ALTER TABLE ONLY env_application ALTER COLUMN id SET DEFAULT nextval('env_applic
 -- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY env_class ALTER COLUMN id SET DEFAULT nextval('env_class_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY env_event_kind ALTER COLUMN id SET DEFAULT nextval('env_event_kind_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY env_event_status ALTER COLUMN id SET DEFAULT nextval('env_event_status_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
 ALTER TABLE ONLY env_resource ALTER COLUMN id SET DEFAULT nextval('env_resource_id_seq'::regclass);
 
 
@@ -4351,6 +4354,27 @@ ALTER TABLE ONLY i18_language ALTER COLUMN id SET DEFAULT nextval('i18_language_
 -- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
+ALTER TABLE ONLY lml_class ALTER COLUMN id SET DEFAULT nextval('lml_class_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY lml_event ALTER COLUMN id SET DEFAULT nextval('lml_event_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY lml_event_status ALTER COLUMN id SET DEFAULT nextval('lml_event_status_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
 ALTER TABLE ONLY opn_operation ALTER COLUMN id SET DEFAULT nextval('opn_operation_id_seq'::regclass);
 
 
@@ -4359,13 +4383,6 @@ ALTER TABLE ONLY opn_operation ALTER COLUMN id SET DEFAULT nextval('opn_operatio
 --
 
 ALTER TABLE ONLY opn_operation_kind ALTER COLUMN id SET DEFAULT nextval('opn_operation_kind_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY opn_target ALTER COLUMN id SET DEFAULT nextval('opn_target_id_seq'::regclass);
 
 
 --
@@ -4443,63 +4460,6 @@ COPY env_application_relation (id, related_to_id) FROM stdin;
 
 
 --
--- Data for Name: env_class; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY env_class (id, name) FROM stdin;
-1	sec_session
-2	sec_authentication_kind
-\.
-
-
---
--- Name: env_class_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('env_class_id_seq', 2, true);
-
-
---
--- Data for Name: env_event_kind; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY env_event_kind (id, name, class_id) FROM stdin;
-1	login_succeded	1
-2	login_failed	1
-4	logout_succeded	1
-5	logout_failed	1
-6	add	2
-7	upd	2
-8	del	2
-\.
-
-
---
--- Name: env_event_kind_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('env_event_kind_id_seq', 8, true);
-
-
---
--- Data for Name: env_event_status; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY env_event_status (id, name) FROM stdin;
-1	началось
-2	в процессе
-3	окончено
-\.
-
-
---
--- Name: env_event_status_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('env_event_status_id_seq', 1, false);
-
-
---
 -- Data for Name: env_resource; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -4571,7 +4531,7 @@ COPY env_resource (id, resource_kind_id) FROM stdin;
 -- Name: env_resource_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('env_resource_id_seq', 61, true);
+SELECT pg_catalog.setval('env_resource_id_seq', 62, true);
 
 
 --
@@ -5922,6 +5882,63 @@ SELECT pg_catalog.setval('i18_language_id_seq', 183, true);
 
 
 --
+-- Data for Name: lml_class; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY lml_class (id, name) FROM stdin;
+1	sec_session
+2	sec_authentication_kind
+\.
+
+
+--
+-- Name: lml_class_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('lml_class_id_seq', 2, true);
+
+
+--
+-- Data for Name: lml_event; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY lml_event (id, name, class_id) FROM stdin;
+1	login_succeded	1
+2	login_failed	1
+4	logout_succeded	1
+5	logout_failed	1
+6	add	2
+7	upd	2
+8	del	2
+\.
+
+
+--
+-- Name: lml_event_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('lml_event_id_seq', 8, true);
+
+
+--
+-- Data for Name: lml_event_status; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY lml_event_status (id, name) FROM stdin;
+1	началось
+2	в процессе
+3	окончено
+\.
+
+
+--
+-- Name: lml_event_status_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('lml_event_status_id_seq', 1, false);
+
+
+--
 -- Data for Name: mdd_class; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -6019,7 +6036,7 @@ SELECT pg_catalog.setval('opn_operation_id_seq', 1, false);
 -- Data for Name: opn_operation_kind; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY opn_operation_kind (id, name, operation_target_id) FROM stdin;
+COPY opn_operation_kind (id, name, class_id) FROM stdin;
 \.
 
 
@@ -6036,21 +6053,6 @@ SELECT pg_catalog.setval('opn_operation_kind_id_seq', 1, false);
 
 COPY opn_person (operation_id, person_id, citizenship_country_id, language_id, person_kind_id) FROM stdin;
 \.
-
-
---
--- Data for Name: opn_target; Type: TABLE DATA; Schema: public; Owner: postgres
---
-
-COPY opn_target (id, name, table_name) FROM stdin;
-\.
-
-
---
--- Name: opn_target_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
---
-
-SELECT pg_catalog.setval('opn_target_id_seq', 1, false);
 
 
 --
@@ -6143,36 +6145,81 @@ SELECT pg_catalog.setval('sec_authentication_path_id_seq', 2, true);
 
 
 --
--- Data for Name: sec_event; Type: TABLE DATA; Schema: public; Owner: postgres
+-- Data for Name: sec_event_log; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_event (whenfired, event_kind, event_status, session_id, context) FROM stdin;
-2015-12-15 00:11:09.36655+03	1	1	1	\N
-2015-12-15 00:22:28.786236+03	1	1	1	\N
-2016-01-02 01:24:55.282399+03	1	1	13	\N
-2016-01-02 01:25:49.405492+03	1	1	14	\N
-2016-01-02 01:57:27.32688+03	1	1	21	\N
-2016-01-02 01:57:27.331835+03	4	1	21	\N
-2016-01-03 01:25:07.938859+03	1	1	28	\N
-2016-01-03 01:25:07.940722+03	6	1	28	\N
-2016-01-04 01:51:20.030701+03	1	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>
-2016-01-04 01:51:20.038502+03	4	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>
-2016-01-06 02:04:12.736708+03	1	1	32	<l_token>(26,26#e45c6c27-e576-ab7f-9db1-890f472bf109,,1,32,"2016-01-06 02:04:12.731973+03",,e45c6c27-e576-ab7f-9db1-890f472bf109)</l_token>
-2016-01-06 02:04:12.753878+03	4	1	32	<l_token>(26,26#e45c6c27-e576-ab7f-9db1-890f472bf109,,1,32,"2016-01-06 02:04:12.731973+03",,e45c6c27-e576-ab7f-9db1-890f472bf109)</l_token>
-2016-01-06 02:04:15.204013+03	1	1	33	<l_token>(27,27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca,,1,33,"2016-01-06 02:04:15.203489+03",,5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca)</l_token>
-2016-01-06 02:04:15.206454+03	4	1	33	<l_token>(27,27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca,,1,33,"2016-01-06 02:04:15.203489+03",,5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca)</l_token>
-2016-01-06 02:17:42.78917+03	1	1	37	<l_token>(31,31#0e8fc585-9bbf-77ad-bc9f-40855c29d089,,1,37,"2016-01-06 02:17:42.788536+03",,0e8fc585-9bbf-77ad-bc9f-40855c29d089)</l_token>
-2016-01-06 02:17:42.806943+03	1	1	38	<l_token>(32,32#88a21ecd-bfb9-f482-8085-53daac48054c,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,38,"2016-01-06 02:17:42.805899+03",,88a21ecd-bfb9-f482-8085-53daac48054c)</l_token>
-2016-01-06 02:17:42.809273+03	4	1	38	<l_token>(32,32#88a21ecd-bfb9-f482-8085-53daac48054c,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,38,"2016-01-06 02:17:42.805899+03",,88a21ecd-bfb9-f482-8085-53daac48054c)</l_token>
-2016-01-06 02:17:42.811355+03	4	1	37	<l_token>(31,31#0e8fc585-9bbf-77ad-bc9f-40855c29d089,,1,37,"2016-01-06 02:17:42.788536+03",,0e8fc585-9bbf-77ad-bc9f-40855c29d089)</l_token>
-2016-01-06 02:24:43.052282+03	1	1	39	<l_token>(33,33#c87f6b71-35e8-b89a-762d-75fe29bc76ef,,1,39,"2016-01-06 02:24:43.050827+03",,c87f6b71-35e8-b89a-762d-75fe29bc76ef)</l_token>
-2016-01-06 02:24:43.071437+03	1	1	40	<l_token>(34,34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,40,"2016-01-06 02:24:43.070376+03",,f9e5420a-2f16-1296-f4a7-eb7e3d70c59e)</l_token>
-2016-01-06 02:24:43.086799+03	4	1	40	<l_token>(34,34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,40,"2016-01-06 02:24:43.070376+03",,f9e5420a-2f16-1296-f4a7-eb7e3d70c59e)</l_token>
-2016-01-06 02:24:43.089401+03	4	1	39	<l_token>(33,33#c87f6b71-35e8-b89a-762d-75fe29bc76ef,,1,39,"2016-01-06 02:24:43.050827+03",,c87f6b71-35e8-b89a-762d-75fe29bc76ef)</l_token>
-2016-01-06 02:30:12.135674+03	1	1	41	<l_token>(35,35#e749c61b-0daa-da66-55d2-da7affe6d025,,1,41,"2016-01-06 02:30:12.134964+03",,e749c61b-0daa-da66-55d2-da7affe6d025)</l_token>
-2016-01-06 02:30:12.151579+03	1	1	42	<l_token>(36,36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,42,"2016-01-06 02:30:12.150998+03",,b54cbbb7-fcee-d6c6-3892-43fb3d17b146)</l_token>
-2016-01-06 02:30:12.178142+03	4	1	42	<l_token>(36,36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,42,"2016-01-06 02:30:12.150998+03",,b54cbbb7-fcee-d6c6-3892-43fb3d17b146)</l_token>
-2016-01-06 02:30:12.179986+03	4	1	41	<l_token>(35,35#e749c61b-0daa-da66-55d2-da7affe6d025,,1,41,"2016-01-06 02:30:12.134964+03",,e749c61b-0daa-da66-55d2-da7affe6d025)</l_token>
+COPY sec_event_log (whenfired, event_kind, event_status, session_id, context, user_name, auth_path_id, tokenvalue) FROM stdin;
+2015-12-15 00:11:09.36655+03	1	1	1	\N	\N	\N	\N
+2015-12-15 00:22:28.786236+03	1	1	1	\N	\N	\N	\N
+2016-01-02 01:24:55.282399+03	1	1	13	\N	\N	\N	\N
+2016-01-02 01:25:49.405492+03	1	1	14	\N	\N	\N	\N
+2016-01-02 01:57:27.32688+03	1	1	21	\N	\N	\N	\N
+2016-01-02 01:57:27.331835+03	4	1	21	\N	\N	\N	\N
+2016-01-03 01:25:07.938859+03	1	1	28	\N	\N	\N	\N
+2016-01-03 01:25:07.940722+03	6	1	28	\N	\N	\N	\N
+2016-01-04 01:51:20.030701+03	1	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>	\N	\N	\N
+2016-01-04 01:51:20.038502+03	4	1	31	<l_token>(25,25#b82c08eb-472c-f985-1732-64d5d07639c3,,1,31,"2016-01-04 01:51:20.030188+03",,b82c08eb-472c-f985-1732-64d5d07639c3)</l_token>	\N	\N	\N
+2016-01-06 02:04:12.736708+03	1	1	32	<l_token>(26,26#e45c6c27-e576-ab7f-9db1-890f472bf109,,1,32,"2016-01-06 02:04:12.731973+03",,e45c6c27-e576-ab7f-9db1-890f472bf109)</l_token>	\N	\N	\N
+2016-01-06 02:04:12.753878+03	4	1	32	<l_token>(26,26#e45c6c27-e576-ab7f-9db1-890f472bf109,,1,32,"2016-01-06 02:04:12.731973+03",,e45c6c27-e576-ab7f-9db1-890f472bf109)</l_token>	\N	\N	\N
+2016-01-06 02:04:15.204013+03	1	1	33	<l_token>(27,27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca,,1,33,"2016-01-06 02:04:15.203489+03",,5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca)</l_token>	\N	\N	\N
+2016-01-06 02:04:15.206454+03	4	1	33	<l_token>(27,27#5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca,,1,33,"2016-01-06 02:04:15.203489+03",,5edd8b37-9d7b-d2ea-1831-0e4418a4e7ca)</l_token>	\N	\N	\N
+2016-01-06 02:17:42.78917+03	1	1	37	<l_token>(31,31#0e8fc585-9bbf-77ad-bc9f-40855c29d089,,1,37,"2016-01-06 02:17:42.788536+03",,0e8fc585-9bbf-77ad-bc9f-40855c29d089)</l_token>	\N	\N	\N
+2016-01-06 02:17:42.806943+03	1	1	38	<l_token>(32,32#88a21ecd-bfb9-f482-8085-53daac48054c,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,38,"2016-01-06 02:17:42.805899+03",,88a21ecd-bfb9-f482-8085-53daac48054c)</l_token>	\N	\N	\N
+2016-01-06 02:17:42.809273+03	4	1	38	<l_token>(32,32#88a21ecd-bfb9-f482-8085-53daac48054c,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,38,"2016-01-06 02:17:42.805899+03",,88a21ecd-bfb9-f482-8085-53daac48054c)</l_token>	\N	\N	\N
+2016-01-06 02:17:42.811355+03	4	1	37	<l_token>(31,31#0e8fc585-9bbf-77ad-bc9f-40855c29d089,,1,37,"2016-01-06 02:17:42.788536+03",,0e8fc585-9bbf-77ad-bc9f-40855c29d089)</l_token>	\N	\N	\N
+2016-01-06 02:24:43.052282+03	1	1	39	<l_token>(33,33#c87f6b71-35e8-b89a-762d-75fe29bc76ef,,1,39,"2016-01-06 02:24:43.050827+03",,c87f6b71-35e8-b89a-762d-75fe29bc76ef)</l_token>	\N	\N	\N
+2016-01-06 02:24:43.071437+03	1	1	40	<l_token>(34,34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,40,"2016-01-06 02:24:43.070376+03",,f9e5420a-2f16-1296-f4a7-eb7e3d70c59e)</l_token>	\N	\N	\N
+2016-01-06 02:24:43.086799+03	4	1	40	<l_token>(34,34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,40,"2016-01-06 02:24:43.070376+03",,f9e5420a-2f16-1296-f4a7-eb7e3d70c59e)</l_token>	\N	\N	\N
+2016-01-06 02:24:43.089401+03	4	1	39	<l_token>(33,33#c87f6b71-35e8-b89a-762d-75fe29bc76ef,,1,39,"2016-01-06 02:24:43.050827+03",,c87f6b71-35e8-b89a-762d-75fe29bc76ef)</l_token>	\N	\N	\N
+2016-01-06 02:30:12.135674+03	1	1	41	<l_token>(35,35#e749c61b-0daa-da66-55d2-da7affe6d025,,1,41,"2016-01-06 02:30:12.134964+03",,e749c61b-0daa-da66-55d2-da7affe6d025)</l_token>	\N	\N	\N
+2016-01-06 02:30:12.151579+03	1	1	42	<l_token>(36,36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,42,"2016-01-06 02:30:12.150998+03",,b54cbbb7-fcee-d6c6-3892-43fb3d17b146)</l_token>	\N	\N	\N
+2016-01-06 02:30:12.178142+03	4	1	42	<l_token>(36,36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146,$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q,1,42,"2016-01-06 02:30:12.150998+03",,b54cbbb7-fcee-d6c6-3892-43fb3d17b146)</l_token>	\N	\N	\N
+2016-01-06 02:30:12.179986+03	4	1	41	<l_token>(35,35#e749c61b-0daa-da66-55d2-da7affe6d025,,1,41,"2016-01-06 02:30:12.134964+03",,e749c61b-0daa-da66-55d2-da7affe6d025)</l_token>	\N	\N	\N
+2016-01-07 01:52:23.634667+03	1	1	113	<l_token>(89,89#6ce09d29-b92f-82b5-d90f-8909c1f76e2e,,1,113,"2016-01-07 01:52:23.629269+03",,6ce09d29-b92f-82b5-d90f-8909c1f76e2e)</l_token>	\N	\N	\N
+2016-01-07 01:52:23.666879+03	1	1	114	<l_token>(90,90#3b906d68-16cd-7ed9-fed7-34f4ed9f52f8,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,114,"2016-01-07 01:52:23.665754+03",,3b906d68-16cd-7ed9-fed7-34f4ed9f52f8)</l_token>	\N	\N	\N
+2016-01-07 01:52:23.746212+03	4	1	114	<l_token>(90,90#3b906d68-16cd-7ed9-fed7-34f4ed9f52f8,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,114,"2016-01-07 01:52:23.665754+03",,3b906d68-16cd-7ed9-fed7-34f4ed9f52f8)</l_token>	\N	\N	\N
+2016-01-07 01:52:23.74879+03	4	1	113	<l_token>(89,89#6ce09d29-b92f-82b5-d90f-8909c1f76e2e,,1,113,"2016-01-07 01:52:23.629269+03",,6ce09d29-b92f-82b5-d90f-8909c1f76e2e)</l_token>	\N	\N	\N
+2016-01-07 01:56:34.430223+03	2	1	116	<user_name>test-001</user_name><auth_path_id>1</auth_path_id><credential>-te$t-creDential#001</credential>	test-001	1	-te$t-creDential#001
+2016-01-07 01:58:05.439068+03	2	1	117	<user_name>test-001</user_name><auth_path_id>1</auth_path_id><credential>-te$t-creDential#001</credential>	test-001	1	-te$t-creDential#001
+2016-01-07 01:58:06.388337+03	2	1	118	<user_name>test-001</user_name><auth_path_id>1</auth_path_id><credential>-te$t-creDential#001</credential>	test-001	1	-te$t-creDential#001
+2016-01-07 01:58:11.870454+03	1	1	119	<l_token>(92,92#44e08338-b209-5369-8960-f3635240ffda,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,119,"2016-01-07 01:58:11.869799+03",,44e08338-b209-5369-8960-f3635240ffda)</l_token>	\N	\N	\N
+2016-01-07 01:59:24.26542+03	1	1	120	<l_token>(93,93#f6399685-3ea0-2714-cb84-c1279eb398cf,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,120,"2016-01-07 01:59:24.264296+03",,f6399685-3ea0-2714-cb84-c1279eb398cf)</l_token>	test-001	1	\N
+2016-01-06 23:48:35.365023+03	1	1	94	<l_token>(73,73#4a82bf3b-4be4-a096-1f3b-132c56926384,,1,94,"2016-01-06 23:48:35.364557+03",,4a82bf3b-4be4-a096-1f3b-132c56926384)</l_token>	\N	\N	\N
+2016-01-06 23:48:35.379242+03	2	1	95	\N	\N	\N	\N
+2016-01-06 23:48:35.406568+03	1	1	96	<l_token>(74,74#0c263ba6-0cbb-31ef-492e-44f57596bf2b,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,96,"2016-01-06 23:48:35.406108+03",,0c263ba6-0cbb-31ef-492e-44f57596bf2b)</l_token>	\N	\N	\N
+2016-01-06 23:48:35.443956+03	4	1	96	<l_token>(74,74#0c263ba6-0cbb-31ef-492e-44f57596bf2b,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,96,"2016-01-06 23:48:35.406108+03",,0c263ba6-0cbb-31ef-492e-44f57596bf2b)</l_token>	\N	\N	\N
+2016-01-06 23:48:35.445828+03	4	1	94	<l_token>(73,73#4a82bf3b-4be4-a096-1f3b-132c56926384,,1,94,"2016-01-06 23:48:35.364557+03",,4a82bf3b-4be4-a096-1f3b-132c56926384)</l_token>	\N	\N	\N
+2016-01-07 02:00:38.076476+03	2	1	121	<user_name>test-001</user_name><auth_path_id>1</auth_path_id><credential>-te$t-creDential#001</credential>	test-001	1	-te$t-creDential#001
+2016-01-07 00:23:49.705787+03	1	1	103	<l_token>(79,79#417fe44e-1597-6ad2-97d0-b49fac29c5de,,1,103,"2016-01-07 00:23:49.705234+03",,417fe44e-1597-6ad2-97d0-b49fac29c5de)</l_token>	\N	\N	\N
+2016-01-07 00:23:49.719995+03	1	1	104	<l_token>(80,80#21d72e94-72d4-6838-7c3d-39724d7cb075,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,104,"2016-01-07 00:23:49.719499+03",,21d72e94-72d4-6838-7c3d-39724d7cb075)</l_token>	\N	\N	\N
+2016-01-07 00:23:49.7633+03	4	1	104	<l_token>(80,80#21d72e94-72d4-6838-7c3d-39724d7cb075,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,104,"2016-01-07 00:23:49.719499+03",,21d72e94-72d4-6838-7c3d-39724d7cb075)</l_token>	\N	\N	\N
+2016-01-07 00:23:49.766135+03	4	1	103	<l_token>(79,79#417fe44e-1597-6ad2-97d0-b49fac29c5de,,1,103,"2016-01-07 00:23:49.705234+03",,417fe44e-1597-6ad2-97d0-b49fac29c5de)</l_token>	\N	\N	\N
+2016-01-07 00:23:59.739603+03	1	1	105	<l_token>(81,81#05fe16d3-fed4-a04d-acdd-5fd91fc4a607,,1,105,"2016-01-07 00:23:59.739078+03",,05fe16d3-fed4-a04d-acdd-5fd91fc4a607)</l_token>	\N	\N	\N
+2016-01-07 00:23:59.754356+03	1	1	106	<l_token>(82,82#cc0ed478-605f-e14f-a7c6-841804218044,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,106,"2016-01-07 00:23:59.753777+03",,cc0ed478-605f-e14f-a7c6-841804218044)</l_token>	\N	\N	\N
+2016-01-07 00:23:59.796591+03	4	1	106	<l_token>(82,82#cc0ed478-605f-e14f-a7c6-841804218044,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,106,"2016-01-07 00:23:59.753777+03",,cc0ed478-605f-e14f-a7c6-841804218044)</l_token>	\N	\N	\N
+2016-01-07 00:23:59.798158+03	4	1	105	<l_token>(81,81#05fe16d3-fed4-a04d-acdd-5fd91fc4a607,,1,105,"2016-01-07 00:23:59.739078+03",,05fe16d3-fed4-a04d-acdd-5fd91fc4a607)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.281201+03	1	1	107	<l_token>(83,83#d737370a-ede2-6146-c1e4-de0ddd50b4af,,1,107,"2016-01-07 00:25:13.280645+03",,d737370a-ede2-6146-c1e4-de0ddd50b4af)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.296332+03	1	1	108	<l_token>(84,84#b748be7c-3888-34bd-d886-4af78b5ef96b,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,108,"2016-01-07 00:25:13.295651+03",,b748be7c-3888-34bd-d886-4af78b5ef96b)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.341614+03	4	1	108	<l_token>(84,84#b748be7c-3888-34bd-d886-4af78b5ef96b,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,108,"2016-01-07 00:25:13.295651+03",,b748be7c-3888-34bd-d886-4af78b5ef96b)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.343414+03	4	1	107	<l_token>(83,83#d737370a-ede2-6146-c1e4-de0ddd50b4af,,1,107,"2016-01-07 00:25:13.280645+03",,d737370a-ede2-6146-c1e4-de0ddd50b4af)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.921266+03	1	1	109	<l_token>(85,85#871b3ec3-3d5b-8ec0-1c52-9e774b862355,,1,109,"2016-01-07 00:25:13.92078+03",,871b3ec3-3d5b-8ec0-1c52-9e774b862355)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.935663+03	1	1	110	<l_token>(86,86#05743ed8-9af1-6bba-691d-686d65952624,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,110,"2016-01-07 00:25:13.935198+03",,05743ed8-9af1-6bba-691d-686d65952624)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.977675+03	4	1	110	<l_token>(86,86#05743ed8-9af1-6bba-691d-686d65952624,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,110,"2016-01-07 00:25:13.935198+03",,05743ed8-9af1-6bba-691d-686d65952624)</l_token>	\N	\N	\N
+2016-01-07 00:25:13.979444+03	4	1	109	<l_token>(85,85#871b3ec3-3d5b-8ec0-1c52-9e774b862355,,1,109,"2016-01-07 00:25:13.92078+03",,871b3ec3-3d5b-8ec0-1c52-9e774b862355)</l_token>	\N	\N	\N
+2016-01-07 00:28:58.358323+03	1	1	111	<l_token>(87,87#bb1fdb5d-0959-3785-df5e-90f52acc62e1,,1,111,"2016-01-07 00:28:58.357735+03",,bb1fdb5d-0959-3785-df5e-90f52acc62e1)</l_token>	\N	\N	\N
+2016-01-07 00:28:58.374968+03	1	1	112	<l_token>(88,88#e9c59acb-4a72-c6fb-4eb8-8612121493dd,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,112,"2016-01-07 00:28:58.374353+03",,e9c59acb-4a72-c6fb-4eb8-8612121493dd)</l_token>	\N	\N	\N
+2016-01-07 00:28:58.435643+03	4	1	112	<l_token>(88,88#e9c59acb-4a72-c6fb-4eb8-8612121493dd,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,112,"2016-01-07 00:28:58.374353+03",,e9c59acb-4a72-c6fb-4eb8-8612121493dd)</l_token>	\N	\N	\N
+2016-01-07 00:28:58.437633+03	4	1	111	<l_token>(87,87#bb1fdb5d-0959-3785-df5e-90f52acc62e1,,1,111,"2016-01-07 00:28:58.357735+03",,bb1fdb5d-0959-3785-df5e-90f52acc62e1)</l_token>	\N	\N	\N
+2016-01-07 01:56:08.160469+03	1	1	115	<l_token>(91,91#4242bffa-1e38-9019-ff60-1834c32dab2e,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,115,"2016-01-07 01:56:08.15582+03",,4242bffa-1e38-9019-ff60-1834c32dab2e)</l_token>	\N	\N	\N
+2016-01-07 02:18:15.188902+03	1	1	122	<l_token>(94,94#f8aefc8b-ec66-f03f-8428-915049b2661b,,1,122,"2016-01-07 02:18:15.186978+03",,f8aefc8b-ec66-f03f-8428-915049b2661b)</l_token>	root	1	\N
+2016-01-07 02:18:15.20858+03	1	1	123	<l_token>(95,95#ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,123,"2016-01-07 02:18:15.206935+03",,ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4)</l_token>	test-001	1	\N
+2016-01-07 02:18:15.265306+03	4	1	123	<l_token>(95,95#ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,123,"2016-01-07 02:18:15.206935+03",,ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4)</l_token>	\N	\N	\N
+2016-01-07 02:18:15.267328+03	4	1	122	<l_token>(94,94#f8aefc8b-ec66-f03f-8428-915049b2661b,,1,122,"2016-01-07 02:18:15.186978+03",,f8aefc8b-ec66-f03f-8428-915049b2661b)</l_token>	\N	\N	\N
+2016-01-07 02:37:13.142611+03	1	1	124	<l_token>(96,96#96db80c0-db13-4d02-a019-d7826e6a71a1,,1,124,"2016-01-07 02:37:13.138332+03",,96db80c0-db13-4d02-a019-d7826e6a71a1)</l_token>	root	1	\N
+2016-01-07 02:37:13.172616+03	1	1	125	<l_token>(97,97#99a3d341-bc54-4a5f-d12e-35ac435318a1,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,125,"2016-01-07 02:37:13.171555+03",,99a3d341-bc54-4a5f-d12e-35ac435318a1)</l_token>	test-001	1	\N
+2016-01-07 02:37:13.249158+03	4	1	125	<l_token>(97,97#99a3d341-bc54-4a5f-d12e-35ac435318a1,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,125,"2016-01-07 02:37:13.171555+03","2016-01-07 02:37:13.243156+03",99a3d341-bc54-4a5f-d12e-35ac435318a1)</l_token>	test-001	1	97#99a3d341-bc54-4a5f-d12e-35ac435318a1
+2016-01-07 02:37:13.251456+03	4	1	124	<l_token>(96,96#96db80c0-db13-4d02-a019-d7826e6a71a1,,1,124,"2016-01-07 02:37:13.138332+03","2016-01-07 02:37:13.250308+03",96db80c0-db13-4d02-a019-d7826e6a71a1)</l_token>	root	1	96#96db80c0-db13-4d02-a019-d7826e6a71a1
+2016-01-07 02:37:23.025914+03	2	1	126	<user_name>test-001</user_name><auth_path_id>1</auth_path_id><credential>-te$t-creDential#001</credential>	test-001	1	-te$t-creDential#001
 \.
 
 
@@ -6200,6 +6247,25 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 25	2016-01-06 02:24:43.068885+03	\N	40
 1	2016-01-06 02:30:12.134391+03	\N	41
 25	2016-01-06 02:30:12.150434+03	\N	42
+1	2016-01-06 23:48:35.364139+03	\N	94
+25	2016-01-06 23:48:35.40549+03	\N	96
+1	2016-01-07 00:23:49.704738+03	\N	103
+25	2016-01-07 00:23:49.718982+03	\N	104
+1	2016-01-07 00:23:59.738338+03	\N	105
+25	2016-01-07 00:23:59.75326+03	\N	106
+1	2016-01-07 00:25:13.28023+03	\N	107
+25	2016-01-07 00:25:13.295131+03	\N	108
+1	2016-01-07 00:25:13.920181+03	\N	109
+25	2016-01-07 00:25:13.934574+03	\N	110
+1	2016-01-07 00:28:58.357206+03	\N	111
+25	2016-01-07 00:28:58.373675+03	\N	112
+1	2016-01-07 01:52:23.623494+03	\N	113
+25	2016-01-07 01:52:23.664417+03	\N	114
+25	2016-01-07 01:56:08.150061+03	\N	115
+25	2016-01-07 01:58:11.868894+03	\N	119
+25	2016-01-07 01:59:24.262703+03	\N	120
+1	2016-01-07 02:18:15.185377+03	\N	122
+25	2016-01-07 02:18:15.205314+03	\N	123
 \.
 
 
@@ -6207,7 +6273,7 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 -- Name: sec_session_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_session_id_seq', 84, true);
+SELECT pg_catalog.setval('sec_session_id_seq', 138, true);
 
 
 --
@@ -6224,6 +6290,27 @@ COPY sec_session_log (user_id, whenstarted, whenended, id, when_logged) FROM std
 25	2016-01-06 02:24:43.068885+03	\N	40	2016-01-06 02:24:43.069305+03
 1	2016-01-06 02:30:12.134391+03	\N	41	2016-01-06 02:30:12.134687+03
 25	2016-01-06 02:30:12.150434+03	\N	42	2016-01-06 02:30:12.150643+03
+1	2016-01-06 23:48:35.364139+03	\N	94	2016-01-06 23:48:35.364353+03
+25	2016-01-06 23:48:35.40549+03	\N	96	2016-01-06 23:48:35.405787+03
+1	2016-01-07 00:23:49.704738+03	\N	103	2016-01-07 00:23:49.705009+03
+25	2016-01-07 00:23:49.718982+03	\N	104	2016-01-07 00:23:49.71919+03
+1	2016-01-07 00:23:59.738338+03	\N	105	2016-01-07 00:23:59.738695+03
+25	2016-01-07 00:23:59.75326+03	\N	106	2016-01-07 00:23:59.753469+03
+1	2016-01-07 00:25:13.28023+03	\N	107	2016-01-07 00:25:13.280443+03
+25	2016-01-07 00:25:13.295131+03	\N	108	2016-01-07 00:25:13.295342+03
+1	2016-01-07 00:25:13.920181+03	\N	109	2016-01-07 00:25:13.920487+03
+25	2016-01-07 00:25:13.934574+03	\N	110	2016-01-07 00:25:13.934878+03
+1	2016-01-07 00:28:58.357206+03	\N	111	2016-01-07 00:28:58.357484+03
+25	2016-01-07 00:28:58.373675+03	\N	112	2016-01-07 00:28:58.374031+03
+1	2016-01-07 01:52:23.623494+03	\N	113	2016-01-07 01:52:23.625809+03
+25	2016-01-07 01:52:23.664417+03	\N	114	2016-01-07 01:52:23.66488+03
+25	2016-01-07 01:56:08.150061+03	\N	115	2016-01-07 01:56:08.151782+03
+25	2016-01-07 01:58:11.868894+03	\N	119	2016-01-07 01:58:11.869415+03
+25	2016-01-07 01:59:24.262703+03	\N	120	2016-01-07 01:59:24.263229+03
+1	2016-01-07 02:18:15.185377+03	\N	122	2016-01-07 02:18:15.186075+03
+25	2016-01-07 02:18:15.205314+03	\N	123	2016-01-07 02:18:15.205836+03
+25	2016-01-07 02:37:13.170203+03	2016-01-07 02:37:13.246044+03	125	2016-01-07 02:37:13.246044+03
+1	2016-01-07 02:37:13.13398+03	2016-01-07 02:37:13.250909+03	124	2016-01-07 02:37:13.250909+03
 \.
 
 
@@ -6245,6 +6332,25 @@ COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom,
 34	34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	40	2016-01-06 02:24:43.070376+03	\N	f9e5420a-2f16-1296-f4a7-eb7e3d70c59e
 35	35#e749c61b-0daa-da66-55d2-da7affe6d025	\N	1	41	2016-01-06 02:30:12.134964+03	\N	e749c61b-0daa-da66-55d2-da7affe6d025
 36	36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	42	2016-01-06 02:30:12.150998+03	\N	b54cbbb7-fcee-d6c6-3892-43fb3d17b146
+73	73#4a82bf3b-4be4-a096-1f3b-132c56926384	\N	1	94	2016-01-06 23:48:35.364557+03	\N	4a82bf3b-4be4-a096-1f3b-132c56926384
+74	74#0c263ba6-0cbb-31ef-492e-44f57596bf2b	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	96	2016-01-06 23:48:35.406108+03	\N	0c263ba6-0cbb-31ef-492e-44f57596bf2b
+79	79#417fe44e-1597-6ad2-97d0-b49fac29c5de	\N	1	103	2016-01-07 00:23:49.705234+03	\N	417fe44e-1597-6ad2-97d0-b49fac29c5de
+80	80#21d72e94-72d4-6838-7c3d-39724d7cb075	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	104	2016-01-07 00:23:49.719499+03	\N	21d72e94-72d4-6838-7c3d-39724d7cb075
+81	81#05fe16d3-fed4-a04d-acdd-5fd91fc4a607	\N	1	105	2016-01-07 00:23:59.739078+03	\N	05fe16d3-fed4-a04d-acdd-5fd91fc4a607
+82	82#cc0ed478-605f-e14f-a7c6-841804218044	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	106	2016-01-07 00:23:59.753777+03	\N	cc0ed478-605f-e14f-a7c6-841804218044
+83	83#d737370a-ede2-6146-c1e4-de0ddd50b4af	\N	1	107	2016-01-07 00:25:13.280645+03	\N	d737370a-ede2-6146-c1e4-de0ddd50b4af
+84	84#b748be7c-3888-34bd-d886-4af78b5ef96b	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	108	2016-01-07 00:25:13.295651+03	\N	b748be7c-3888-34bd-d886-4af78b5ef96b
+85	85#871b3ec3-3d5b-8ec0-1c52-9e774b862355	\N	1	109	2016-01-07 00:25:13.92078+03	\N	871b3ec3-3d5b-8ec0-1c52-9e774b862355
+86	86#05743ed8-9af1-6bba-691d-686d65952624	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	110	2016-01-07 00:25:13.935198+03	\N	05743ed8-9af1-6bba-691d-686d65952624
+87	87#bb1fdb5d-0959-3785-df5e-90f52acc62e1	\N	1	111	2016-01-07 00:28:58.357735+03	\N	bb1fdb5d-0959-3785-df5e-90f52acc62e1
+88	88#e9c59acb-4a72-c6fb-4eb8-8612121493dd	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	112	2016-01-07 00:28:58.374353+03	\N	e9c59acb-4a72-c6fb-4eb8-8612121493dd
+89	89#6ce09d29-b92f-82b5-d90f-8909c1f76e2e	\N	1	113	2016-01-07 01:52:23.629269+03	\N	6ce09d29-b92f-82b5-d90f-8909c1f76e2e
+90	90#3b906d68-16cd-7ed9-fed7-34f4ed9f52f8	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	114	2016-01-07 01:52:23.665754+03	\N	3b906d68-16cd-7ed9-fed7-34f4ed9f52f8
+91	91#4242bffa-1e38-9019-ff60-1834c32dab2e	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	115	2016-01-07 01:56:08.15582+03	\N	4242bffa-1e38-9019-ff60-1834c32dab2e
+92	92#44e08338-b209-5369-8960-f3635240ffda	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	119	2016-01-07 01:58:11.869799+03	\N	44e08338-b209-5369-8960-f3635240ffda
+93	93#f6399685-3ea0-2714-cb84-c1279eb398cf	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	120	2016-01-07 01:59:24.264296+03	\N	f6399685-3ea0-2714-cb84-c1279eb398cf
+94	94#f8aefc8b-ec66-f03f-8428-915049b2661b	\N	1	122	2016-01-07 02:18:15.186978+03	\N	f8aefc8b-ec66-f03f-8428-915049b2661b
+95	95#ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	123	2016-01-07 02:18:15.206935+03	\N	ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4
 \.
 
 
@@ -6252,7 +6358,7 @@ COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom,
 -- Name: sec_token_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_token_id_seq', 66, true);
+SELECT pg_catalog.setval('sec_token_id_seq', 109, true);
 
 
 --
@@ -6269,6 +6375,27 @@ COPY sec_token_log (id, localvalue, credential, auth_path_id, session_id, validf
 34	34#f9e5420a-2f16-1296-f4a7-eb7e3d70c59e	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	40	2016-01-06 02:24:43.070376+03	\N	f9e5420a-2f16-1296-f4a7-eb7e3d70c59e	2016-01-06 02:24:43.07103+03
 35	35#e749c61b-0daa-da66-55d2-da7affe6d025	\N	1	41	2016-01-06 02:30:12.134964+03	\N	e749c61b-0daa-da66-55d2-da7affe6d025	2016-01-06 02:30:12.135383+03
 36	36#b54cbbb7-fcee-d6c6-3892-43fb3d17b146	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	1	42	2016-01-06 02:30:12.150998+03	\N	b54cbbb7-fcee-d6c6-3892-43fb3d17b146	2016-01-06 02:30:12.151386+03
+73	73#4a82bf3b-4be4-a096-1f3b-132c56926384	\N	1	94	2016-01-06 23:48:35.364557+03	\N	4a82bf3b-4be4-a096-1f3b-132c56926384	2016-01-06 23:48:35.364846+03
+74	74#0c263ba6-0cbb-31ef-492e-44f57596bf2b	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	96	2016-01-06 23:48:35.406108+03	\N	0c263ba6-0cbb-31ef-492e-44f57596bf2b	2016-01-06 23:48:35.406394+03
+79	79#417fe44e-1597-6ad2-97d0-b49fac29c5de	\N	1	103	2016-01-07 00:23:49.705234+03	\N	417fe44e-1597-6ad2-97d0-b49fac29c5de	2016-01-07 00:23:49.705584+03
+80	80#21d72e94-72d4-6838-7c3d-39724d7cb075	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	104	2016-01-07 00:23:49.719499+03	\N	21d72e94-72d4-6838-7c3d-39724d7cb075	2016-01-07 00:23:49.719818+03
+81	81#05fe16d3-fed4-a04d-acdd-5fd91fc4a607	\N	1	105	2016-01-07 00:23:59.739078+03	\N	05fe16d3-fed4-a04d-acdd-5fd91fc4a607	2016-01-07 00:23:59.739421+03
+82	82#cc0ed478-605f-e14f-a7c6-841804218044	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	106	2016-01-07 00:23:59.753777+03	\N	cc0ed478-605f-e14f-a7c6-841804218044	2016-01-07 00:23:59.754143+03
+83	83#d737370a-ede2-6146-c1e4-de0ddd50b4af	\N	1	107	2016-01-07 00:25:13.280645+03	\N	d737370a-ede2-6146-c1e4-de0ddd50b4af	2016-01-07 00:25:13.281017+03
+84	84#b748be7c-3888-34bd-d886-4af78b5ef96b	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	108	2016-01-07 00:25:13.295651+03	\N	b748be7c-3888-34bd-d886-4af78b5ef96b	2016-01-07 00:25:13.296137+03
+85	85#871b3ec3-3d5b-8ec0-1c52-9e774b862355	\N	1	109	2016-01-07 00:25:13.92078+03	\N	871b3ec3-3d5b-8ec0-1c52-9e774b862355	2016-01-07 00:25:13.921088+03
+86	86#05743ed8-9af1-6bba-691d-686d65952624	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	110	2016-01-07 00:25:13.935198+03	\N	05743ed8-9af1-6bba-691d-686d65952624	2016-01-07 00:25:13.935492+03
+87	87#bb1fdb5d-0959-3785-df5e-90f52acc62e1	\N	1	111	2016-01-07 00:28:58.357735+03	\N	bb1fdb5d-0959-3785-df5e-90f52acc62e1	2016-01-07 00:28:58.358106+03
+88	88#e9c59acb-4a72-c6fb-4eb8-8612121493dd	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	112	2016-01-07 00:28:58.374353+03	\N	e9c59acb-4a72-c6fb-4eb8-8612121493dd	2016-01-07 00:28:58.374648+03
+89	89#6ce09d29-b92f-82b5-d90f-8909c1f76e2e	\N	1	113	2016-01-07 01:52:23.629269+03	\N	6ce09d29-b92f-82b5-d90f-8909c1f76e2e	2016-01-07 01:52:23.631981+03
+90	90#3b906d68-16cd-7ed9-fed7-34f4ed9f52f8	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	114	2016-01-07 01:52:23.665754+03	\N	3b906d68-16cd-7ed9-fed7-34f4ed9f52f8	2016-01-07 01:52:23.666406+03
+91	91#4242bffa-1e38-9019-ff60-1834c32dab2e	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	115	2016-01-07 01:56:08.15582+03	\N	4242bffa-1e38-9019-ff60-1834c32dab2e	2016-01-07 01:56:08.157933+03
+92	92#44e08338-b209-5369-8960-f3635240ffda	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	119	2016-01-07 01:58:11.869799+03	\N	44e08338-b209-5369-8960-f3635240ffda	2016-01-07 01:58:11.870196+03
+93	93#f6399685-3ea0-2714-cb84-c1279eb398cf	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	120	2016-01-07 01:59:24.264296+03	\N	f6399685-3ea0-2714-cb84-c1279eb398cf	2016-01-07 01:59:24.264922+03
+94	94#f8aefc8b-ec66-f03f-8428-915049b2661b	\N	1	122	2016-01-07 02:18:15.186978+03	\N	f8aefc8b-ec66-f03f-8428-915049b2661b	2016-01-07 02:18:15.187727+03
+95	95#ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	123	2016-01-07 02:18:15.206935+03	\N	ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4	2016-01-07 02:18:15.207823+03
+97	97#99a3d341-bc54-4a5f-d12e-35ac435318a1	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	125	2016-01-07 02:37:13.171555+03	2016-01-07 02:37:13.243156+03	99a3d341-bc54-4a5f-d12e-35ac435318a1	2016-01-07 02:37:13.243156+03
+96	96#96db80c0-db13-4d02-a019-d7826e6a71a1	\N	1	124	2016-01-07 02:37:13.138332+03	2016-01-07 02:37:13.250308+03	96db80c0-db13-4d02-a019-d7826e6a71a1	2016-01-07 02:37:13.250308+03
 \.
 
 
@@ -6288,7 +6415,7 @@ COPY sec_user (id, person_id, name) FROM stdin;
 
 COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_till, credential_hash) FROM stdin;
 1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1900-01-01 00:00:00+02:30:17	2999-12-31 00:00:00+03	\N
-25	1	$2a$06$SWPXTUjLxFh0vUpKj3vSVeEqNE8re1vigqalEKOhRPnyswbZWx.3q	2016-01-02 01:24:55.288942+03	2016-02-02 01:24:55.288944+03	3eda716bf9f86b2d757cf72aaebfbe8b4d446c9f1b8ed6a277e3861e94f7fa20cd4de4c493e4efc48f134a0f01ad56a6222578ca68f77e091eb1934eb42779a7
+25	1	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	2016-01-07 00:00:00+03	infinity	f46774d8efffa3d8ad5e1d32a5d2607d768436b7c7f7b6e3b2771fda43303911789731c1d73155a166b99caab11c311403a6046c3b338ab9fa2ee5c1a73d8088
 \.
 
 
@@ -6304,7 +6431,7 @@ COPY sec_user_authcred_log (log_id, user_id, auth_path_id, credential, valid_fro
 -- Name: sec_user_authcred_log_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 10, true);
+SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 37, true);
 
 
 --
@@ -6371,27 +6498,11 @@ ALTER TABLE ONLY env_application_relation
 
 
 --
--- Name: pk_env_class; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
---
-
-ALTER TABLE ONLY env_class
-    ADD CONSTRAINT pk_env_class PRIMARY KEY (id);
-
-
---
 -- Name: pk_env_event; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
-ALTER TABLE ONLY env_event_kind
+ALTER TABLE ONLY lml_event
     ADD CONSTRAINT pk_env_event PRIMARY KEY (id);
-
-
---
--- Name: pk_env_event_status; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
---
-
-ALTER TABLE ONLY env_event_status
-    ADD CONSTRAINT pk_env_event_status PRIMARY KEY (id);
 
 
 --
@@ -6467,6 +6578,22 @@ ALTER TABLE ONLY i18_language
 
 
 --
+-- Name: pk_lml_class; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY lml_class
+    ADD CONSTRAINT pk_lml_class PRIMARY KEY (id);
+
+
+--
+-- Name: pk_lml_event_status; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY lml_event_status
+    ADD CONSTRAINT pk_lml_event_status PRIMARY KEY (id);
+
+
+--
 -- Name: pk_opn_operation; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
@@ -6488,14 +6615,6 @@ ALTER TABLE ONLY opn_operation_kind
 
 ALTER TABLE ONLY opn_person
     ADD CONSTRAINT pk_opn_person01 PRIMARY KEY (operation_id);
-
-
---
--- Name: pk_opn_target; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
---
-
-ALTER TABLE ONLY opn_target
-    ADD CONSTRAINT pk_opn_target PRIMARY KEY (id);
 
 
 --
@@ -6547,11 +6666,11 @@ ALTER TABLE ONLY sec_authentication_path
 
 
 --
--- Name: pk_sec_events; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+-- Name: pk_sec_event_logs; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
 --
 
-ALTER TABLE ONLY sec_event
-    ADD CONSTRAINT pk_sec_events PRIMARY KEY (session_id, whenfired, event_kind, event_status);
+ALTER TABLE ONLY sec_event_log
+    ADD CONSTRAINT pk_sec_event_logs PRIMARY KEY (session_id, whenfired, event_kind, event_status);
 
 
 --
@@ -6707,14 +6826,6 @@ ALTER TABLE ONLY env_application_relation
 
 
 --
--- Name: fk_env_event_kind01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY env_event_kind
-    ADD CONSTRAINT fk_env_event_kind01 FOREIGN KEY (class_id) REFERENCES env_class(id);
-
-
---
 -- Name: fk_env_resource01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -6763,6 +6874,14 @@ ALTER TABLE ONLY i18_currency_country
 
 
 --
+-- Name: fk_lml_event01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY lml_event
+    ADD CONSTRAINT fk_lml_event01 FOREIGN KEY (class_id) REFERENCES lml_class(id);
+
+
+--
 -- Name: fk_opn_operation01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -6791,7 +6910,7 @@ ALTER TABLE ONLY opn_operation
 --
 
 ALTER TABLE ONLY opn_operation_kind
-    ADD CONSTRAINT fk_opn_operation_kind01 FOREIGN KEY (operation_target_id) REFERENCES opn_target(id);
+    ADD CONSTRAINT fk_opn_operation_kind01 FOREIGN KEY (class_id) REFERENCES lml_class(id);
 
 
 --
@@ -6891,19 +7010,19 @@ ALTER TABLE ONLY sec_authentication_path
 
 
 --
--- Name: fk_sec_event01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: fk_sec_event_log01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY sec_event
-    ADD CONSTRAINT fk_sec_event01 FOREIGN KEY (event_kind) REFERENCES env_event_kind(id);
+ALTER TABLE ONLY sec_event_log
+    ADD CONSTRAINT fk_sec_event_log01 FOREIGN KEY (event_kind) REFERENCES lml_event(id);
 
 
 --
--- Name: fk_sec_event02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: fk_sec_event_log02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
-ALTER TABLE ONLY sec_event
-    ADD CONSTRAINT fk_sec_event02 FOREIGN KEY (event_status) REFERENCES env_event_status(id);
+ALTER TABLE ONLY sec_event_log
+    ADD CONSTRAINT fk_sec_event_log02 FOREIGN KEY (event_status) REFERENCES lml_event_status(id);
 
 
 --
