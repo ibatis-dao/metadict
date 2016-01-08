@@ -1679,7 +1679,7 @@ begin
     perform sec_event_log_start(l_session.id, 'sec_session', 'login_failed', xml(format('<user_name>%1$s</user_name><auth_path_id>%2$s</auth_path_id><credential>%3$s</credential>', p_user_name, p_auth_path_id, p_credential)), p_user_name, p_auth_path_id, p_credential);
     -- 'SEC00007', 'login failed. wrong or unknown username (%s) or credential/authentication path'
     raise warning invalid_password using message = env_resource_text_format('SEC00007', p_user_name);
-    
+    -- TODO: блокирование (перенос действия на некоторое время в будущее) учетных данных при достижении критического порога неудачных попыток логина
     return null;
   end if;
 end;
@@ -2757,7 +2757,8 @@ SET default_with_oids = true;
 CREATE TABLE sec_user (
     id integer NOT NULL,
     person_id integer,
-    name character varying(50) NOT NULL
+    name character varying(50) NOT NULL,
+    time_zone timestamp with time zone
 );
 
 
@@ -2767,7 +2768,35 @@ ALTER TABLE public.sec_user OWNER TO postgres;
 -- Name: TABLE sec_user; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE sec_user IS 'пользователи';
+COMMENT ON TABLE sec_user IS 'учетные записи пользователей';
+
+
+--
+-- Name: COLUMN sec_user.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user.id IS 'идентификатор учетной записи';
+
+
+--
+-- Name: COLUMN sec_user.person_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user.person_id IS 'идентификатор персоны, ассоциированной с этой учетной записью';
+
+
+--
+-- Name: COLUMN sec_user.name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user.name IS 'имя (логин, ник) учетной записи';
+
+
+--
+-- Name: COLUMN sec_user.time_zone; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_user.time_zone IS 'часовой пояс';
 
 
 --
@@ -3883,6 +3912,120 @@ COMMENT ON COLUMN opn_person.language_id IS 'родной (основной) я�
 --
 
 COMMENT ON COLUMN opn_person.person_kind_id IS 'тип персоны';
+
+
+--
+-- Name: opn_person_individual; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE opn_person_individual (
+    operation_id integer NOT NULL,
+    person_id integer NOT NULL,
+    last_name character varying(255),
+    middle_name character varying(255),
+    first_name character varying(255),
+    birthdate date
+);
+
+
+ALTER TABLE public.opn_person_individual OWNER TO postgres;
+
+--
+-- Name: TABLE opn_person_individual; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE opn_person_individual IS 'операция по созданию/модификации/удалению физического лица';
+
+
+--
+-- Name: COLUMN opn_person_individual.operation_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_individual.operation_id IS 'код операции';
+
+
+--
+-- Name: COLUMN opn_person_individual.person_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_individual.person_id IS 'код физ.лица';
+
+
+--
+-- Name: COLUMN opn_person_individual.last_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_individual.last_name IS 'Фамилия';
+
+
+--
+-- Name: COLUMN opn_person_individual.middle_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_individual.middle_name IS 'Отчество';
+
+
+--
+-- Name: COLUMN opn_person_individual.first_name; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_individual.first_name IS 'Имя';
+
+
+--
+-- Name: COLUMN opn_person_individual.birthdate; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_individual.birthdate IS 'Дата рождения';
+
+
+--
+-- Name: opn_person_legal; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE opn_person_legal (
+    operation_id integer NOT NULL,
+    person_id integer NOT NULL,
+    name_short character varying(255),
+    name_long character varying(511)
+);
+
+
+ALTER TABLE public.opn_person_legal OWNER TO postgres;
+
+--
+-- Name: TABLE opn_person_legal; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE opn_person_legal IS 'операция по созданию/модификации/удалению юридического лица';
+
+
+--
+-- Name: COLUMN opn_person_legal.operation_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_legal.operation_id IS 'код операции';
+
+
+--
+-- Name: COLUMN opn_person_legal.person_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_legal.person_id IS 'код юр.лица';
+
+
+--
+-- Name: COLUMN opn_person_legal.name_short; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_legal.name_short IS 'Краткое наименование';
+
+
+--
+-- Name: COLUMN opn_person_legal.name_long; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN opn_person_legal.name_long IS 'Полное наименование';
 
 
 --
@@ -6056,6 +6199,22 @@ COPY opn_person (operation_id, person_id, citizenship_country_id, language_id, p
 
 
 --
+-- Data for Name: opn_person_individual; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY opn_person_individual (operation_id, person_id, last_name, middle_name, first_name, birthdate) FROM stdin;
+\.
+
+
+--
+-- Data for Name: opn_person_legal; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY opn_person_legal (operation_id, person_id, name_short, name_long) FROM stdin;
+\.
+
+
+--
 -- Data for Name: prs_person; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
@@ -6403,9 +6562,9 @@ COPY sec_token_log (id, localvalue, credential, auth_path_id, session_id, validf
 -- Data for Name: sec_user; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-COPY sec_user (id, person_id, name) FROM stdin;
-1	1	root
-25	24	test-001
+COPY sec_user (id, person_id, name, time_zone) FROM stdin;
+1	1	root	\N
+25	24	test-001	\N
 \.
 
 
@@ -6615,6 +6774,22 @@ ALTER TABLE ONLY opn_operation_kind
 
 ALTER TABLE ONLY opn_person
     ADD CONSTRAINT pk_opn_person01 PRIMARY KEY (operation_id);
+
+
+--
+-- Name: pk_opn_person_individual; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY opn_person_individual
+    ADD CONSTRAINT pk_opn_person_individual PRIMARY KEY (operation_id);
+
+
+--
+-- Name: pk_opn_person_legal; Type: CONSTRAINT; Schema: public; Owner: postgres; Tablespace: 
+--
+
+ALTER TABLE ONLY opn_person_legal
+    ADD CONSTRAINT pk_opn_person_legal PRIMARY KEY (operation_id);
 
 
 --
@@ -6951,6 +7126,38 @@ ALTER TABLE ONLY opn_person
 
 ALTER TABLE ONLY opn_person
     ADD CONSTRAINT fk_opn_person05 FOREIGN KEY (person_kind_id) REFERENCES prs_person_kind(id);
+
+
+--
+-- Name: fk_opn_person_individual01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person_individual
+    ADD CONSTRAINT fk_opn_person_individual01 FOREIGN KEY (operation_id) REFERENCES opn_operation(id);
+
+
+--
+-- Name: fk_opn_person_individual02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person_individual
+    ADD CONSTRAINT fk_opn_person_individual02 FOREIGN KEY (person_id) REFERENCES prs_person(id);
+
+
+--
+-- Name: fk_opn_person_legal01; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person_legal
+    ADD CONSTRAINT fk_opn_person_legal01 FOREIGN KEY (operation_id) REFERENCES opn_operation(id);
+
+
+--
+-- Name: fk_opn_person_legal02; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY opn_person_legal
+    ADD CONSTRAINT fk_opn_person_legal02 FOREIGN KEY (person_id) REFERENCES prs_person(id);
 
 
 --
