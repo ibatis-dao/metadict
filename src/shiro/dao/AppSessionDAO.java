@@ -2,6 +2,7 @@ package shiro.dao;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.shiro.authc.UsernamePasswordToken;
@@ -21,7 +22,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
 	}
 
 	@Override
-	public String login(UsernamePasswordToken cred) throws Exception {
+	public String login(HashMap<String, String> cred) throws Exception {
         log.trace(">>> login");
         ORMFacade orm = new ORMFacade();
         try {
@@ -29,7 +30,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
             AppSessionMapper mapper = orm.getMapper(AppSessionMapper.class);
         	log.trace("before mapper.login("+cred+")");
         	String sessId = mapper.login(cred);
-            log.trace("after mapper.login(user)");
+            log.trace("after mapper.login(cred)");
             orm.commit();
             log.trace("<<< login");
             return sessId;
@@ -44,7 +45,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
 
 	@Override
 	public AppSession getSessionByID(String sessionId) throws Exception {
-        log.trace(">>> login");
+        log.trace(">>> getSessionByID");
         ORMFacade orm = new ORMFacade();
         try {
             log.trace("before orm.getMapper(AppUserMapper)");
@@ -53,7 +54,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
         	AppSession sess = mapper.getSessionByID(sessionId);
             log.trace("after mapper.sessionById(sessionId)");
             orm.commit();
-            log.trace("<<< login");
+            log.trace("<<< getSessionByID");
             return sess;
         } catch (Exception e) {
             log.error(null, e);

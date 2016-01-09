@@ -142,17 +142,26 @@ public class SubjectTest {
 		log.info("session.id="+session.getId());
 		log.info(">> before isAuthenticated()");
 		assertTrue(currentUser.isAuthenticated());
+		log.info(">> before logout()");
+		currentUser.logout();
 		log.info("<< testLogin");
 	}
 
-	//@Test
+	@Test
 	public void testIsAuthenticated() {
 		log.info(">> testIsAuthenticated");
 		Subject currentUser = SecurityUtils.getSubject();
 		assertNotNull(currentUser);
+		log.info(">> before logout()");
+		currentUser.logout();
+		log.info(">> before isAuthenticated()");
 		assertFalse(currentUser.isAuthenticated());
+		log.info(">> before login(token)");
 		currentUser.login(token);
+		log.info(">> before isAuthenticated()");
 		assertTrue(currentUser.isAuthenticated());
+		log.info(">> before logout()");
+		currentUser.logout();
 	}
 
 	//@Test
@@ -215,9 +224,9 @@ public class SubjectTest {
 		fail("Not yet implemented");
 	}
 
-	//@Test
+	@Test
 	public void integralTest() {
-        log.info("My First Apache Shiro Application");
+        log.info(">> integralTest()");
         Factory<SecurityManager> factory = new IniSecurityManagerFactory("classpath:shiro.ini");
         SecurityManager securityManager = factory.getInstance();
         SecurityUtils.setSecurityManager(securityManager);
@@ -281,6 +290,7 @@ public class SubjectTest {
 		
         //all done - log out!
         currentUser.logout();
+        log.info("<< integralTest()");
 	}
 
 }

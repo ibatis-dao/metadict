@@ -1,5 +1,6 @@
 package shiro;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
@@ -47,28 +48,31 @@ public class MybatisRealm extends AuthorizingRealm {
 	        }
 	        if (! (token instanceof UsernamePasswordToken)) {
 	        	// это проблемы с конфигурацией. сюда должны попадать только запросы аутентификации по логину/паролю
-	            throw new AccountException("AuthenticationToken should implement AuthenticationToken interface");
+	            throw new AccountException("AuthenticationToken expected to be subclass of UsernamePasswordToken");
 	        }
 			UsernamePasswordToken upToken = (UsernamePasswordToken) token;
 	        String username = upToken.getUsername();
-	        char[] password = upToken.getPassword();
+	        String password = new String(upToken.getPassword());
 	        // Null username is invalid
 	        if (username == null) {
 	            throw new AccountException("Null username not allowed.");
 	        }
-            log.debug("User=" + username + ", pass="+(password==null?"":password.toString())+", host="+upToken.getHost());
+            //log.debug("User=" + username + ", pass="+password+", host="+upToken.getHost());
 	        
+        	HashMap<String, String> cred = new HashMap<String, String>();
 	        try {
+	        	cred.put("username", username);
+	        	cred.put("password", password);
+	        	cred.put("host", upToken.getHost());
 	        	AppSessionMapper dao = new AppSessionDAO();
-	        	String appSessionID = dao.login(upToken);
+	        	String appSessionID = dao.login(cred);
 	        	AppSession appSession = dao.getSessionByID(appSessionID);
+	        	log.debug("appSession="+appSession.toString());
 	    		// prevents shiro from password checking. actual password verification made by dao.login()
 	            CredentialsMatcher cm = getCredentialsMatcher();
 	            if ((cm == null) || (cm != null && cm.getClass() != AllowAllCredentialsMatcher.class)) {
 	            	setCredentialsMatcher(new AllowAllCredentialsMatcher());
 	            }
-	            //password = user.getPasswd();
-	            log.debug("User [" + username + "] is logged in. Pass="+(password==null?"":password.toString())+", appSession.Id="+appSession.getId());
 	            SecurityUtils.getSubject().getSession().setAttribute(sessionAttribute, appSession);
 	        } catch (Exception e) {
 	            final String message = "Error while authenticating user [" + username + "]";
@@ -77,7 +81,7 @@ public class MybatisRealm extends AuthorizingRealm {
 	            throw new AuthenticationException(message, e);
 	        }
 	
-	        info = new SimpleAuthenticationInfo(username, (password == null)?new char[0]:password, getName());
+	        info = new SimpleAuthenticationInfo(username, password.toCharArray(), getName());
         }
         return info;
 	}

@@ -1,6 +1,7 @@
 package shiro.dao;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.shiro.authc.UsernamePasswordToken;
@@ -14,7 +15,7 @@ public interface AppSessionMapper {
 	 * the @Param("paramName") annotation on the parameter. 
 	 **/
 
-	String login(UsernamePasswordToken cred) throws Exception;
+	String login(HashMap<String, String> cred) throws Exception;
     
 	AppSession getSessionByID(String sessionId) throws Exception;
     

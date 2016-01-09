@@ -15,7 +15,6 @@
   </settings>
   <typeAliases>
     <typeAlias alias="AppSession" type="shiro.dao.AppSession"/>
-    <typeAlias alias="UsernamePasswordToken" type="org.apache.shiro.authc.UsernamePasswordToken"/>
     <typeAlias alias="AppUser" type="shiro.dao.AppUser"/>
     <typeAlias alias="AppUserRole" type="shiro.dao.AppUserRole"/>
     <typeAlias alias="AppUserPermission" type="shiro.dao.AppUserPermission"/>

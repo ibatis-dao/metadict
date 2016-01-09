@@ -4,17 +4,14 @@
   "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="shiro.dao.AppSessionMapper">
 
-    <resultMap type="UsernamePasswordToken" id="UsernamePasswordTokenMap">
-        <result column="username" property="username"/>
-        <result column="password" property="password"/>
-    </resultMap>
-
     <resultMap type="AppSession" id="AppSessionMap">
         <id column="ID" property="id"/>
-        <result column="SUBJECTID" property="subjectId"/>
-        <result column="APPINFO" property="appInfo"/>
-        <result column="SERVERINFO" property="serverInfo"/>
-        <result column="CLIENTINFO" property="clientInfo"/>
+        <result column="localvalue" property="localTokenValue"/>
+        <result column="originvalue" property="originTokenValue"/>
+        <result column="session_id" property="sessionId"/>
+        <!-- result column="whensessionstarted" property="whenStarted"/ -->
+        <result column="user_id" property="userId"/>
+        
     </resultMap>
 
     <resultMap type="AppUserRole" id="AppUserRoleMap">
@@ -41,8 +38,8 @@
     end;
     </update -->
     
-    <select id="login" databaseId="postgresql" parameterType="UsernamePasswordToken" resultType="String">
-    select tkn.localvalue -- локализованное (уникальное) значение токена
+    <select id="login" databaseId="postgresql" parameterType="hashmap" resultType="String">
+    select tkn.localvalue
       from sec_login(#{username}, #{password}) tkn
     </select>
     
@@ -74,6 +71,8 @@
 
     <select id="getRoles" databaseId="postgresql" parameterType="AppUser" resultMap="AppUserRoleMap">
     select 1 as id, 'MySecurityGroupName' as name
+	union all
+	select 2 as id, 'admin' as name
     </select>
 
     <select id="getPermissions" databaseId="oracle" parameterType="AppUser" resultMap="AppUserPermissionMap">
@@ -97,10 +96,12 @@
 	   and ugl.UserID = #{id}
     </select>
 
-    <select id="getPermissions" databaseId="postgresql" parameterType="AppUser" resultMap="AppUserPermissionMap">
-    select 1 || ':' || 2 as ID,
-       'SecurityObjectName' as objectName,
-       'SecurityOperName' as methodName
+    <select id="getPermissions" databaseId="postgresql" resultMap="AppUserPermissionMap">
+    select '1:2' as ID, 'SecurityObjectName' as objectName, 'SecurityOperName' as methodName
+    union all
+    select 'lightsaber:weild' as ID, 'SecurityObjectName' as objectName, 'SecurityOperName' as methodName
+    union all
+    select 'winnebago:drive:eagle5' as ID, 'SecurityObjectName' as objectName, 'SecurityOperName' as methodName
     </select>
     
 </mapper>

@@ -47,7 +47,14 @@ public class AppSession implements Serializable {
         this.permissions = permissions;
     }
     
-	/**
+	@Override
+	public String toString() {
+		return "id="+id+", localTokenValue="+localTokenValue+", originTokenValue="+originTokenValue+
+			", sessionId="+sessionId+", userId="+userId+
+			", whenStarted="+whenStarted.getTime()+", whenLastActive="+whenLastActive.getTime();
+	}
+	
+    /**
 	 * @return the id of application session
 	 * идентификатор сессии приложения
 	 */

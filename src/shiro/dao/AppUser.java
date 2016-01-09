@@ -27,7 +27,7 @@ public class AppUser implements Serializable {
     
     private String id;			// идентификатор пользователя
     private String name;		// имя (ник/логин) пользователя
-    private String passwd;		// пароль
+    //private String passwd;		// пароль
     private Locale locale;		// страна и язык пользователя
     private TimeZone timeZone;	// часовой пояс пользователя
     private PersonIndividual person; //TODO: добавить поддержку
@@ -74,7 +74,7 @@ public class AppUser implements Serializable {
     public void setName(String name) { 
     	this.name = name; 
     }
-    
+    /*
     public String getPasswd() {
 		return passwd;
 	}
@@ -82,7 +82,7 @@ public class AppUser implements Serializable {
 	public void setPasswd(String passwd) {
 		this.passwd = passwd;
 	}
-
+	*/
 	@Override
     public String toString() {
         return "Id="+id+", Name="+name;

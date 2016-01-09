@@ -75,7 +75,7 @@
 		
 		<!-- Selenide :: 2.25
 		web app UI-tests. concise API for Selenium WebDriver -->
-		<dependency org="com.codeborne" name="selenide" rev="2.25"/>
+		<!-- dependency org="com.codeborne" name="selenide" rev="2.25"/ -->
 		
 	</dependencies>
 </ivy-module>
