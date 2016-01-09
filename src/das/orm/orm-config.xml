@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE configuration
+  PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+  <properties resource="das/orm/orm-config.properties">
+  	<property name="keepDBConnection" value="false"/>
+  </properties>
+    <settings>
+    <!-- Valid values of logImpl are: SLF4J, LOG4J, LOG4J2, JDK_LOGGING, COMMONS_LOGGING, STDOUT_LOGGING, NO_LOGGING -->
+  	<setting name="logImpl" value="SLF4J"/>
+  	<setting name="logPrefix" value="shiro"/>
+  	<!-- setting name="lazyLoadingEnabled" value="true"/ -->
+  	<!-- setting name="jdbcTypeForNull" value="NULL"/ -->
+  </settings>
+  <typeAliases>
+    <typeAlias alias="AppSession" type="shiro.dao.AppSession"/>
+    <typeAlias alias="UsernamePasswordToken" type="org.apache.shiro.authc.UsernamePasswordToken"/>
+    <typeAlias alias="AppUser" type="shiro.dao.AppUser"/>
+    <typeAlias alias="AppUserRole" type="shiro.dao.AppUserRole"/>
+    <typeAlias alias="AppUserPermission" type="shiro.dao.AppUserPermission"/>
+    <!-- typeAlias alias="BLOB" type="oracle.sql.BLOB"/ -->
+  </typeAliases>
+  
+  <!-- typeHandlers>
+    <package name="org.apache.ibatis.type"/>
+    <typeHandler javaType="byte[]" jdbcType="BLOB" handler="org.apache.ibatis.type.BlobTypeHandler"/> 
+  </typeHandlers  -->
+  <environments default="development-postgresql">
+    <environment id="development-postgresql">
+      <transactionManager type="JDBC" >
+      	<!-- property name="commitRequired" value="true"/ -->
+      	<!-- property name="autocommit" value="true"/ -->
+      </transactionManager>
+      <dataSource type="POOLED">
+        <property name="driver" value="${jdbc-postgresql-dev-driver}"/>
+        <property name="url" value="${jdbc-postgresql-dev-url}"/>
+        <property name="username" value="${jdbc-postgresql-dev-username}"/>
+        <property name="password" value="${jdbc-postgresql-dev-password}"/>
+        <!-- set pg_stat_activity.application_name for this connection -->
+        <property name="driver.ApplicationName" value="AuthShiro03"/>
+      </dataSource>
+    </environment>
+    </environments>
+  <databaseIdProvider type="DB_VENDOR">
+    <property name="PostgreSQL" value="postgresql"/>
+    <property name="Oracle" value="oracle" />
+  </databaseIdProvider>
+  <mappers>
+    <mapper resource="das/dao/filter/FilterMapper.xml"/>
+    <mapper resource="shiro/dao/AppSessionMapper.xml"/>
+    <mapper resource="shiro/dao/AppUserMapper.xml"/>
+    </mappers>
+</configuration>

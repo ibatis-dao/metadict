@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="shiro.dao.AppSessionMapper">
+
+    <resultMap type="UsernamePasswordToken" id="UsernamePasswordTokenMap">
+        <result column="username" property="username"/>
+        <result column="password" property="password"/>
+    </resultMap>
+
+    <resultMap type="AppSession" id="AppSessionMap">
+        <id column="ID" property="id"/>
+        <result column="SUBJECTID" property="subjectId"/>
+        <result column="APPINFO" property="appInfo"/>
+        <result column="SERVERINFO" property="serverInfo"/>
+        <result column="CLIENTINFO" property="clientInfo"/>
+    </resultMap>
+
+    <resultMap type="AppUserRole" id="AppUserRoleMap">
+        <id column="ID" property="id" jdbcType="BIGINT"/>
+        <result column="NAME" property="name"/>
+    </resultMap>
+
+    <resultMap type="AppUserPermission" id="AppUserPermissionMap">
+        <id column="ID" property="id"/>
+        <result column="objectName" property="objectName"/>
+        <result column="methodName" property="methodName"/>
+    </resultMap>
+
+    <!--
+    update id="login" databaseId="oracle" statementType="CALLABLE" parameterType="AppUser">
+    begin
+        lisa.USR_SESSION.InitAppSession(
+            UserName => #{name,jdbcType=VARCHAR,javaType=java.lang.String},
+            UserPassword => #{passwd,jdbcType=VARCHAR,javaType=java.lang.String},
+            ClientInfo => #{clientInfo,jdbcType=VARCHAR,javaType=java.lang.String},
+            SessionID => #{appSessionId,mode=OUT,javaType=BigInteger,jdbcType=BIGINT},
+            UserID => #{id,mode=OUT,javaType=BigInteger,jdbcType=BIGINT}
+        );
+    end;
+    </update -->
+    
+    <select id="login" databaseId="postgresql" parameterType="UsernamePasswordToken" resultType="String">
+    select tkn.localvalue -- локализованное (уникальное) значение токена
+      from sec_login(#{username}, #{password}) tkn
+    </select>
+    
+    <select id="getSessionByID" databaseId="postgresql" parameterType="String" resultMap="AppSessionMap">
+    select ts.* 
+      from sec_token_session ts,
+           sec_token_find_by_value(#{SessionID}) tkn
+     where ts.id = tkn.id 
+    </select>
+    
+    <!-- update id="logout" databaseId="oracle" statementType="CALLABLE" parameterType="AppUser">
+    begin
+        lisa.USR_SESSION.EndAppSession( #{appSessionId,mode=IN,jdbcType=BIGINT} );
+    end;
+    </update -->
+    
+    <select id="logout" databaseId="postgresql" parameterType="String" resultType="int">
+    {call sec_logout(#{SessionID,jdbcType=VARCHAR,mode=IN}) }
+    </select>
+    
+    <select id="getRoles" databaseId="oracle" parameterType="AppUser" resultMap="AppUserRoleMap">
+    select ug.id,
+	       ug.name
+      from lisa.USERGROUP ug,
+           lisa.USERGROUPLINK ugl
+     where ugl.UserGroupID = ug.id
+       and ugl.UserID = #{id}
+    </select>
+
+    <select id="getRoles" databaseId="postgresql" parameterType="AppUser" resultMap="AppUserRoleMap">
+    select 1 as id, 'MySecurityGroupName' as name
+    </select>
+
+    <select id="getPermissions" databaseId="oracle" parameterType="AppUser" resultMap="AppUserPermissionMap">
+	select t.id || ':' || tkop.OperID as ID,
+    	   t.sname as objectName,
+	       tkop.opername as methodName
+	  from (select tsk.id,
+    	           tsk.sname,
+        	       tsk.parentid
+	          from lisa.TASK tsk
+	       connect by prior tsk.id = tsk.parentid
+	         start with tsk.parentid is null) t,
+	       lisa.TASKOPERATIONS tkop,
+	       lisa.USERTASKOPERATIONS uto,
+	       lisa.USERGROUPLINK ugl
+ 	 where tkop.taskid = t.id
+	   and uto.taskid = tkop.taskid
+	   and uto.operid = tkop.operid
+	   and uto.rights = 1
+	   and uto.UserGroupID = ugl.UserGroupID
+	   and ugl.UserID = #{id}
+    </select>
+
+    <select id="getPermissions" databaseId="postgresql" parameterType="AppUser" resultMap="AppUserPermissionMap">
+    select 1 || ':' || 2 as ID,
+       'SecurityObjectName' as objectName,
+       'SecurityOperName' as methodName
+    </select>
+    
+</mapper>

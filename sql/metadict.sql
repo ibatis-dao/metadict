@@ -2949,14 +2949,9 @@ begin
   end if;
   */
   -- Готовим учетные данные к хранению (хеш пароля, сертификат, идентификатор во внешней доверенной системе и т.п.)
-  if (l_session.user_id = l_user.id) then
-    l_uac.credential_hash := sec_user_authcred_hash(p_session_id, p_credential, p_auth_path_id);
-  else
-    l_uac.credential_hash := sec_user_authcred_hash_any(p_session_id, l_user.id, p_credential, p_auth_path_id);
-  end if;
   update sec_user_authcred
-     set credential = sec_user_authcred_encrypt(l_user.id, p_credential, p_auth_path_id),
-	 credential_hash = l_uac.credential_hash
+     set credential = sec_user_authcred_encrypt(p_session_id, l_user.id, p_credential, p_auth_path_id),
+	 credential_hash = sec_user_authcred_hash(p_session_id, l_user.id, p_credential, p_auth_path_id)
    where user_id = l_user.id
      and auth_path_id = p_auth_path_id
   returning * into l_uac;
@@ -4326,6 +4321,100 @@ COMMENT ON COLUMN sec_token_log.validtill IS 'момент (включитель
 --
 
 COMMENT ON COLUMN sec_token_log.originvalue IS 'исходное оригинальное значение токена, полученное от источника аутентификации';
+
+
+--
+-- Name: sec_token_session; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW sec_token_session AS
+SELECT t.id, t.localvalue, t.credential, t.auth_path_id, t.session_id, t.validfrom, t.validtill, t.originvalue, s.user_id, s.whenstarted AS whensessionstarted, s.whenended AS whensessionended FROM (sec_token t JOIN sec_session s ON ((s.id = t.session_id)));
+
+
+ALTER TABLE public.sec_token_session OWNER TO postgres;
+
+--
+-- Name: VIEW sec_token_session; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON VIEW sec_token_session IS 'сессии пользователей и ассоциированные с ними токены безопасности';
+
+
+--
+-- Name: COLUMN sec_token_session.id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.id IS 'идентификатор токена';
+
+
+--
+-- Name: COLUMN sec_token_session.localvalue; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.localvalue IS 'локализованное (уникальное) значение токена';
+
+
+--
+-- Name: COLUMN sec_token_session.credential; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.credential IS 'Учетные данные, использованные при аутентификации';
+
+
+--
+-- Name: COLUMN sec_token_session.auth_path_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.auth_path_id IS 'источник аутентификации';
+
+
+--
+-- Name: COLUMN sec_token_session.session_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.session_id IS 'идентификатор сессии';
+
+
+--
+-- Name: COLUMN sec_token_session.validfrom; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.validfrom IS 'момент (включительно) начала действия токена';
+
+
+--
+-- Name: COLUMN sec_token_session.validtill; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.validtill IS 'момент (включительно) окончания действия токена';
+
+
+--
+-- Name: COLUMN sec_token_session.originvalue; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.originvalue IS 'исходное оригинальное значение токена, полученное от источника аутентификации';
+
+
+--
+-- Name: COLUMN sec_token_session.user_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.user_id IS 'код пользователя';
+
+
+--
+-- Name: COLUMN sec_token_session.whensessionstarted; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.whensessionstarted IS 'дата/время начала сессии';
+
+
+--
+-- Name: COLUMN sec_token_session.whensessionended; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN sec_token_session.whensessionended IS 'дата/время завершения сессии (если была завершена явным образом)';
 
 
 --
@@ -6031,6 +6120,7 @@ SELECT pg_catalog.setval('i18_language_id_seq', 183, true);
 COPY lml_class (id, name) FROM stdin;
 1	sec_session
 2	sec_authentication_kind
+3	sec_user
 \.
 
 
@@ -6038,7 +6128,7 @@ COPY lml_class (id, name) FROM stdin;
 -- Name: lml_class_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('lml_class_id_seq', 2, true);
+SELECT pg_catalog.setval('lml_class_id_seq', 3, true);
 
 
 --
@@ -6053,6 +6143,7 @@ COPY lml_event (id, name, class_id) FROM stdin;
 6	add	2
 7	upd	2
 8	del	2
+9	create	3
 \.
 
 
@@ -6060,7 +6151,7 @@ COPY lml_event (id, name, class_id) FROM stdin;
 -- Name: lml_event_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('lml_event_id_seq', 8, true);
+SELECT pg_catalog.setval('lml_event_id_seq', 9, true);
 
 
 --
@@ -6223,6 +6314,7 @@ COPY prs_person (id, citizenship_country_id, language_id, person_kind_id) FROM s
 2	182	137	1
 3	182	137	1
 24	182	137	1
+27	182	137	1
 \.
 
 
@@ -6230,7 +6322,7 @@ COPY prs_person (id, citizenship_country_id, language_id, person_kind_id) FROM s
 -- Name: prs_person_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('prs_person_id_seq', 24, true);
+SELECT pg_catalog.setval('prs_person_id_seq', 27, true);
 
 
 --
@@ -6240,6 +6332,7 @@ SELECT pg_catalog.setval('prs_person_id_seq', 24, true);
 COPY prs_person_individual (person_id, last_name, middle_name, first_name, birthdate) FROM stdin;
 1	root	root	root	\N
 24	\N	\N	test-001	\N
+27	\N	\N	user01	\N
 \.
 
 
@@ -6379,6 +6472,18 @@ COPY sec_event_log (whenfired, event_kind, event_status, session_id, context, us
 2016-01-07 02:37:13.249158+03	4	1	125	<l_token>(97,97#99a3d341-bc54-4a5f-d12e-35ac435318a1,$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6,1,125,"2016-01-07 02:37:13.171555+03","2016-01-07 02:37:13.243156+03",99a3d341-bc54-4a5f-d12e-35ac435318a1)</l_token>	test-001	1	97#99a3d341-bc54-4a5f-d12e-35ac435318a1
 2016-01-07 02:37:13.251456+03	4	1	124	<l_token>(96,96#96db80c0-db13-4d02-a019-d7826e6a71a1,,1,124,"2016-01-07 02:37:13.138332+03","2016-01-07 02:37:13.250308+03",96db80c0-db13-4d02-a019-d7826e6a71a1)</l_token>	root	1	96#96db80c0-db13-4d02-a019-d7826e6a71a1
 2016-01-07 02:37:23.025914+03	2	1	126	<user_name>test-001</user_name><auth_path_id>1</auth_path_id><credential>-te$t-creDential#001</credential>	test-001	1	-te$t-creDential#001
+2016-01-09 00:55:34.730322+03	1	1	141	<l_token>(112,112#71ba20e2-e05d-d687-4c6c-4cf21ab6aa88,,1,141,"2016-01-09 00:55:34.729662+03",,71ba20e2-e05d-d687-4c6c-4cf21ab6aa88)</l_token>	root	1	\N
+2016-01-09 00:55:34.739363+03	9	1	141	<l_user>(28,27,user01,)</l_user>	\N	\N	\N
+2016-01-09 01:16:43.452998+03	1	1	142	<l_token>(113,113#2af0dafd-e441-ea1b-483a-ed077f55cc2c,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,142,"2016-01-09 01:16:43.448419+03",,2af0dafd-e441-ea1b-483a-ed077f55cc2c)</l_token>	user01	\N	\N
+2016-01-09 01:29:03.411384+03	1	1	143	<l_token>(114,114#8e691d77-858a-2de6-793a-411329cd9963,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,143,"2016-01-09 01:29:03.410791+03",,8e691d77-858a-2de6-793a-411329cd9963)</l_token>	user01	\N	\N
+2016-01-09 01:29:15.806844+03	1	1	144	<l_token>(115,115#9467e5ee-7ee5-e70f-1976-a3a14b31d233,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,144,"2016-01-09 01:29:15.806359+03",,9467e5ee-7ee5-e70f-1976-a3a14b31d233)</l_token>	user01	\N	\N
+2016-01-09 01:32:54.508606+03	1	1	145	<l_token>(116,116#38e7414f-ec5f-a201-168f-7ac561d36036,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,145,"2016-01-09 01:32:54.508011+03",,38e7414f-ec5f-a201-168f-7ac561d36036)</l_token>	user01	\N	\N
+2016-01-09 01:34:34.129806+03	1	1	146	<l_token>(117,117#c26e0c0c-2022-fb86-8c2d-06693182c650,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,146,"2016-01-09 01:34:34.129369+03",,c26e0c0c-2022-fb86-8c2d-06693182c650)</l_token>	user01	\N	\N
+2016-01-09 01:35:36.45861+03	1	1	147	<l_token>(118,118#9f29bd5d-0451-92ad-465c-f61f5ff8d60b,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,147,"2016-01-09 01:35:36.458133+03",,9f29bd5d-0451-92ad-465c-f61f5ff8d60b)</l_token>	user01	\N	\N
+2016-01-09 01:45:41.039833+03	1	1	148	<l_token>(119,119#2c496ac2-5dcb-328f-c039-eab47ed50f79,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,148,"2016-01-09 01:45:41.034459+03",,2c496ac2-5dcb-328f-c039-eab47ed50f79)</l_token>	user01	\N	\N
+2016-01-09 01:45:52.235221+03	1	1	149	<l_token>(120,120#e25edb80-97dc-8af7-c276-7365831a3a15,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,149,"2016-01-09 01:45:52.234485+03",,e25edb80-97dc-8af7-c276-7365831a3a15)</l_token>	user01	\N	\N
+2016-01-09 01:51:33.608745+03	1	1	150	<l_token>(121,121#6d7b83fb-d9e5-63c7-bd9e-bb112832efe7,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,150,"2016-01-09 01:51:33.608134+03",,6d7b83fb-d9e5-63c7-bd9e-bb112832efe7)</l_token>	user01	\N	\N
+2016-01-09 01:52:46.799723+03	1	1	151	<l_token>(122,122#14c00e50-58a7-f6b6-5b95-b1203b8fae6d,$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO,,151,"2016-01-09 01:52:46.799275+03",,14c00e50-58a7-f6b6-5b95-b1203b8fae6d)</l_token>	user01	\N	\N
 \.
 
 
@@ -6425,6 +6530,17 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 25	2016-01-07 01:59:24.262703+03	\N	120
 1	2016-01-07 02:18:15.185377+03	\N	122
 25	2016-01-07 02:18:15.205314+03	\N	123
+1	2016-01-09 00:55:34.729155+03	\N	141
+28	2016-01-09 01:16:43.441397+03	\N	142
+28	2016-01-09 01:29:03.410103+03	\N	143
+28	2016-01-09 01:29:15.805794+03	\N	144
+28	2016-01-09 01:32:54.507324+03	\N	145
+28	2016-01-09 01:34:34.128808+03	\N	146
+28	2016-01-09 01:35:36.457574+03	\N	147
+28	2016-01-09 01:45:41.028018+03	\N	148
+28	2016-01-09 01:45:52.233841+03	\N	149
+28	2016-01-09 01:51:33.607498+03	\N	150
+28	2016-01-09 01:52:46.79857+03	\N	151
 \.
 
 
@@ -6432,7 +6548,7 @@ COPY sec_session (user_id, whenstarted, whenended, id) FROM stdin;
 -- Name: sec_session_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_session_id_seq', 138, true);
+SELECT pg_catalog.setval('sec_session_id_seq', 151, true);
 
 
 --
@@ -6470,6 +6586,17 @@ COPY sec_session_log (user_id, whenstarted, whenended, id, when_logged) FROM std
 25	2016-01-07 02:18:15.205314+03	\N	123	2016-01-07 02:18:15.205836+03
 25	2016-01-07 02:37:13.170203+03	2016-01-07 02:37:13.246044+03	125	2016-01-07 02:37:13.246044+03
 1	2016-01-07 02:37:13.13398+03	2016-01-07 02:37:13.250909+03	124	2016-01-07 02:37:13.250909+03
+1	2016-01-09 00:55:34.729155+03	\N	141	2016-01-09 00:55:34.729431+03
+28	2016-01-09 01:16:43.441397+03	\N	142	2016-01-09 01:16:43.443531+03
+28	2016-01-09 01:29:03.410103+03	\N	143	2016-01-09 01:29:03.410392+03
+28	2016-01-09 01:29:15.805794+03	\N	144	2016-01-09 01:29:15.806027+03
+28	2016-01-09 01:32:54.507324+03	\N	145	2016-01-09 01:32:54.507595+03
+28	2016-01-09 01:34:34.128808+03	\N	146	2016-01-09 01:34:34.129036+03
+28	2016-01-09 01:35:36.457574+03	\N	147	2016-01-09 01:35:36.457801+03
+28	2016-01-09 01:45:41.028018+03	\N	148	2016-01-09 01:45:41.029855+03
+28	2016-01-09 01:45:52.233841+03	\N	149	2016-01-09 01:45:52.234128+03
+28	2016-01-09 01:51:33.607498+03	\N	150	2016-01-09 01:51:33.607778+03
+28	2016-01-09 01:52:46.79857+03	\N	151	2016-01-09 01:52:46.798912+03
 \.
 
 
@@ -6510,6 +6637,17 @@ COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom,
 93	93#f6399685-3ea0-2714-cb84-c1279eb398cf	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	120	2016-01-07 01:59:24.264296+03	\N	f6399685-3ea0-2714-cb84-c1279eb398cf
 94	94#f8aefc8b-ec66-f03f-8428-915049b2661b	\N	1	122	2016-01-07 02:18:15.186978+03	\N	f8aefc8b-ec66-f03f-8428-915049b2661b
 95	95#ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	123	2016-01-07 02:18:15.206935+03	\N	ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4
+112	112#71ba20e2-e05d-d687-4c6c-4cf21ab6aa88	\N	1	141	2016-01-09 00:55:34.729662+03	\N	71ba20e2-e05d-d687-4c6c-4cf21ab6aa88
+113	113#2af0dafd-e441-ea1b-483a-ed077f55cc2c	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	142	2016-01-09 01:16:43.448419+03	\N	2af0dafd-e441-ea1b-483a-ed077f55cc2c
+114	114#8e691d77-858a-2de6-793a-411329cd9963	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	143	2016-01-09 01:29:03.410791+03	\N	8e691d77-858a-2de6-793a-411329cd9963
+115	115#9467e5ee-7ee5-e70f-1976-a3a14b31d233	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	144	2016-01-09 01:29:15.806359+03	\N	9467e5ee-7ee5-e70f-1976-a3a14b31d233
+116	116#38e7414f-ec5f-a201-168f-7ac561d36036	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	145	2016-01-09 01:32:54.508011+03	\N	38e7414f-ec5f-a201-168f-7ac561d36036
+117	117#c26e0c0c-2022-fb86-8c2d-06693182c650	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	146	2016-01-09 01:34:34.129369+03	\N	c26e0c0c-2022-fb86-8c2d-06693182c650
+118	118#9f29bd5d-0451-92ad-465c-f61f5ff8d60b	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	147	2016-01-09 01:35:36.458133+03	\N	9f29bd5d-0451-92ad-465c-f61f5ff8d60b
+119	119#2c496ac2-5dcb-328f-c039-eab47ed50f79	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	148	2016-01-09 01:45:41.034459+03	\N	2c496ac2-5dcb-328f-c039-eab47ed50f79
+120	120#e25edb80-97dc-8af7-c276-7365831a3a15	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	149	2016-01-09 01:45:52.234485+03	\N	e25edb80-97dc-8af7-c276-7365831a3a15
+121	121#6d7b83fb-d9e5-63c7-bd9e-bb112832efe7	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	150	2016-01-09 01:51:33.608134+03	\N	6d7b83fb-d9e5-63c7-bd9e-bb112832efe7
+122	122#14c00e50-58a7-f6b6-5b95-b1203b8fae6d	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	151	2016-01-09 01:52:46.799275+03	\N	14c00e50-58a7-f6b6-5b95-b1203b8fae6d
 \.
 
 
@@ -6517,7 +6655,7 @@ COPY sec_token (id, localvalue, credential, auth_path_id, session_id, validfrom,
 -- Name: sec_token_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_token_id_seq', 109, true);
+SELECT pg_catalog.setval('sec_token_id_seq', 122, true);
 
 
 --
@@ -6555,6 +6693,17 @@ COPY sec_token_log (id, localvalue, credential, auth_path_id, session_id, validf
 95	95#ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	123	2016-01-07 02:18:15.206935+03	\N	ce585f5b-387b-4c4e-a64b-7b5e3c36b8d4	2016-01-07 02:18:15.207823+03
 97	97#99a3d341-bc54-4a5f-d12e-35ac435318a1	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	1	125	2016-01-07 02:37:13.171555+03	2016-01-07 02:37:13.243156+03	99a3d341-bc54-4a5f-d12e-35ac435318a1	2016-01-07 02:37:13.243156+03
 96	96#96db80c0-db13-4d02-a019-d7826e6a71a1	\N	1	124	2016-01-07 02:37:13.138332+03	2016-01-07 02:37:13.250308+03	96db80c0-db13-4d02-a019-d7826e6a71a1	2016-01-07 02:37:13.250308+03
+112	112#71ba20e2-e05d-d687-4c6c-4cf21ab6aa88	\N	1	141	2016-01-09 00:55:34.729662+03	\N	71ba20e2-e05d-d687-4c6c-4cf21ab6aa88	2016-01-09 00:55:34.730067+03
+113	113#2af0dafd-e441-ea1b-483a-ed077f55cc2c	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	142	2016-01-09 01:16:43.448419+03	\N	2af0dafd-e441-ea1b-483a-ed077f55cc2c	2016-01-09 01:16:43.450245+03
+114	114#8e691d77-858a-2de6-793a-411329cd9963	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	143	2016-01-09 01:29:03.410791+03	\N	8e691d77-858a-2de6-793a-411329cd9963	2016-01-09 01:29:03.411131+03
+115	115#9467e5ee-7ee5-e70f-1976-a3a14b31d233	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	144	2016-01-09 01:29:15.806359+03	\N	9467e5ee-7ee5-e70f-1976-a3a14b31d233	2016-01-09 01:29:15.80661+03
+116	116#38e7414f-ec5f-a201-168f-7ac561d36036	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	145	2016-01-09 01:32:54.508011+03	\N	38e7414f-ec5f-a201-168f-7ac561d36036	2016-01-09 01:32:54.50835+03
+117	117#c26e0c0c-2022-fb86-8c2d-06693182c650	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	146	2016-01-09 01:34:34.129369+03	\N	c26e0c0c-2022-fb86-8c2d-06693182c650	2016-01-09 01:34:34.12962+03
+118	118#9f29bd5d-0451-92ad-465c-f61f5ff8d60b	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	147	2016-01-09 01:35:36.458133+03	\N	9f29bd5d-0451-92ad-465c-f61f5ff8d60b	2016-01-09 01:35:36.458422+03
+119	119#2c496ac2-5dcb-328f-c039-eab47ed50f79	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	148	2016-01-09 01:45:41.034459+03	\N	2c496ac2-5dcb-328f-c039-eab47ed50f79	2016-01-09 01:45:41.036909+03
+120	120#e25edb80-97dc-8af7-c276-7365831a3a15	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	149	2016-01-09 01:45:52.234485+03	\N	e25edb80-97dc-8af7-c276-7365831a3a15	2016-01-09 01:45:52.23493+03
+121	121#6d7b83fb-d9e5-63c7-bd9e-bb112832efe7	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	150	2016-01-09 01:51:33.608134+03	\N	6d7b83fb-d9e5-63c7-bd9e-bb112832efe7	2016-01-09 01:51:33.608486+03
+122	122#14c00e50-58a7-f6b6-5b95-b1203b8fae6d	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	\N	151	2016-01-09 01:52:46.799275+03	\N	14c00e50-58a7-f6b6-5b95-b1203b8fae6d	2016-01-09 01:52:46.799538+03
 \.
 
 
@@ -6565,6 +6714,7 @@ COPY sec_token_log (id, localvalue, credential, auth_path_id, session_id, validf
 COPY sec_user (id, person_id, name, time_zone) FROM stdin;
 1	1	root	\N
 25	24	test-001	\N
+28	27	user01	\N
 \.
 
 
@@ -6575,6 +6725,7 @@ COPY sec_user (id, person_id, name, time_zone) FROM stdin;
 COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_till, credential_hash) FROM stdin;
 1	1	$2a$06$G1H4HN1PEDgNPyBtwGiTDesLv7jQxw06RPTJj4KSRdnLk7E3rDmiu	1900-01-01 00:00:00+02:30:17	2999-12-31 00:00:00+03	\N
 25	1	$2a$06$lxfinbkwy2l54QSoQzkS9uF2uh4BPQtnWpycuuO147egN1RFIAEE6	2016-01-07 00:00:00+03	infinity	f46774d8efffa3d8ad5e1d32a5d2607d768436b7c7f7b6e3b2771fda43303911789731c1d73155a166b99caab11c311403a6046c3b338ab9fa2ee5c1a73d8088
+28	1	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	2016-01-09 00:55:34.738635+03	2016-02-09 00:55:34.738637+03	b4ed7f379028178b96f966a95dcaab20b6b1005e57235fbe9a5b2b354af3c29e3c7c543608ef06d35cf37bfd440a82731d07536cd38bd7183beeb73c8630dd3d
 \.
 
 
@@ -6583,6 +6734,7 @@ COPY sec_user_authcred (user_id, auth_path_id, credential, valid_from, valid_til
 --
 
 COPY sec_user_authcred_log (log_id, user_id, auth_path_id, credential, valid_from, valid_till, credential_hash, when_logged) FROM stdin;
+38	28	1	$2a$06$BiNlWj/pnc3lpP.Ukz157utjx945pULBZpaycUF.UUnyZi1mKMQOO	2016-01-09 00:55:34.738635+03	2016-02-09 00:55:34.738637+03	b4ed7f379028178b96f966a95dcaab20b6b1005e57235fbe9a5b2b354af3c29e3c7c543608ef06d35cf37bfd440a82731d07536cd38bd7183beeb73c8630dd3d	2016-01-09 00:55:34.877367+03
 \.
 
 
@@ -6590,14 +6742,14 @@ COPY sec_user_authcred_log (log_id, user_id, auth_path_id, credential, valid_fro
 -- Name: sec_user_authcred_log_log_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 37, true);
+SELECT pg_catalog.setval('sec_user_authcred_log_log_id_seq', 38, true);
 
 
 --
 -- Name: sec_user_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('sec_user_id_seq', 25, true);
+SELECT pg_catalog.setval('sec_user_id_seq', 28, true);
 
 
 --

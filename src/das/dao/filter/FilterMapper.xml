@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="fxapp01.dao.filter.FilterMapper">
+    <!-- And -->
+    <sql id="And" databaseId="oracle" lang="2">({0}) and ({1})</sql>
+    <sql id="And" databaseId="postgresql">({0}) and ({1})</sql>
+    <!-- Between -->
+    <sql id="Between" databaseId="oracle">{0} between {1} and {2}</sql>
+    <sql id="Between" databaseId="postgresql">{0} between {1} and {2}</sql>
+    <!-- Equals -->
+    <sql id="Equals" databaseId="oracle">{0} = {1}</sql>
+    <sql id="Equals" databaseId="postgresql">{0} = {1}</sql>
+    <!-- NotEquals -->
+    <sql id="NotEquals" databaseId="oracle">{0} &lt;&gt; {1}</sql>
+    <sql id="NotEquals" databaseId="postgresql">{0} &lt;&gt; {1}</sql>
+    <!-- Greater -->
+    <sql id="Greater" databaseId="oracle">{0} &gt; {1}</sql>
+    <sql id="Greater" databaseId="postgresql">{0} &gt; {1}</sql>
+    <!-- GreaterOrEquals -->
+    <sql id="GreaterOrEquals" databaseId="oracle">{0} &gt;= {1}</sql>
+    <sql id="GreaterOrEquals" databaseId="postgresql">{0} &gt;= {1}</sql>
+    <!-- IsNull -->
+    <sql id="IsNull" databaseId="oracle">{0} is null</sql>
+    <sql id="IsNull" databaseId="postgresql">{0} is null</sql>
+    <!-- IsNotNull -->
+    <sql id="IsNotNull" databaseId="oracle">{0} is not null</sql>
+    <sql id="IsNotNull" databaseId="postgresql">{0} is not null</sql>
+    <!-- Less -->
+    <sql id="Less" databaseId="oracle">{0} &lt; {1}</sql>
+    <sql id="Less" databaseId="postgresql">{0} &lt; {1}</sql>
+    <!-- LessOrEquals -->
+    <sql id="LessOrEquals" databaseId="oracle">{0} =&lt; {1}</sql>
+    <sql id="LessOrEquals" databaseId="postgresql">{0} =&lt; {1}</sql>
+    <!-- Like -->
+    <sql id="Like" databaseId="oracle">{0} like {1}</sql>
+    <sql id="Like" databaseId="postgresql">{0} like {1}</sql>
+    <!-- NotLike -->
+    <sql id="NotLike" databaseId="oracle">{0} not like {1}</sql>
+    <sql id="NotLike" databaseId="postgresql">{0} not like {1}</sql>
+    <!-- Not -->
+    <sql id="Not" databaseId="oracle">not ({0})</sql>
+    <sql id="Not" databaseId="postgresql">not ({0})</sql>
+    <!-- Or -->
+    <sql id="Or" databaseId="oracle">({0}) or ({1})</sql>
+    <sql id="Or" databaseId="postgresql">({0}) or ({1})</sql>
+    <!-- Containing -->
+    <sql id="Containing" databaseId="oracle">{0} like '%{1}%'</sql>
+    <sql id="Containing" databaseId="postgresql">{0} containing {1}</sql>
+    <!-- StartsWith -->
+    <sql id="StartsWith" databaseId="oracle">{0} like '{1}%'</sql>
+    <sql id="StartsWith" databaseId="postgresql">{0} starts with {1}</sql>
+    <!-- EndsWith -->
+    <sql id="EndsWith" databaseId="oracle">{0} like '%{1}'</sql>
+    <sql id="EndsWith" databaseId="postgresql">{0} ends with {1}</sql>
+    <!-- In -->
+    <sql id="In" databaseId="oracle">{0} in {1}</sql>
+    <sql id="In" databaseId="postgresql">{0} in {1}</sql>
+    <!-- NotIn -->
+    <sql id="NotIn" databaseId="oracle">{0} not in {1}</sql>
+    <sql id="NotIn" databaseId="postgresql">{0} not in {1}</sql>
+    <!-- Exists -->
+    <sql id="Exists" databaseId="oracle">exists {0}</sql>
+    <sql id="Exists" databaseId="postgresql">exists {0}</sql>
+    <!-- NotExists -->
+    <sql id="NotExists" databaseId="oracle">not exists {0}</sql>
+    <sql id="NotExists" databaseId="postgresql">not exists {0}</sql>
+    
+</mapper>
