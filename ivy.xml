@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!DOCTYPE ivy-module [
-	<!ENTITY vaadin.version "7.5.8">
+	<!ENTITY vaadin.version "7.5.10">
 	<!ENTITY ApacheShiro.version "1.2.3">
 	<!ENTITY slf4j.version "1.7.12">
 	<!ENTITY mybatis.version "3.3.0"> 
@@ -11,13 +11,13 @@
 	<info organisation="com.example" module="v7proj" />
 	<configurations>
 		<!-- The default configuration, which should be deployed to the server -->
-		<conf name="default" />
+		<conf name="default" description="default. for deployment to the server"/>
 		<!-- A configuration only needed when compiling the widget set. Should 
 			not be deployed to the server -->
-		<conf name="widgetset-compile" />
+		<conf name="widgetset-compile" description="only for compiling widget set. not for deployment"/>
 		<!-- A configuration used in compilation of server side classes only.
 			Should be deployed to the server -->
-		<conf name="nodeploy" />
+		<conf name="nodeploy" description="compilation of server side classes. for deployment to the server"/>
 	</configurations>
 	<dependencies defaultconf="default" defaultconfmapping="default->default">
 		<!-- The core server part of Vaadin -->
@@ -44,11 +44,11 @@
 			rev="&vaadin.version;" conf="widgetset-compile->default" />
 		
 		<!-- Apache commons-io -->
-		<dependency org="commons-io" name="commons-io" rev="2.4"/>
+		<dependency org="commons-io" name="commons-io" rev="2.4" />
 		
 		<!-- Apache Shiro -->
-		<dependency org="org.apache.shiro" name="shiro-core" rev="&ApacheShiro.version;"/>
-		<dependency org="org.apache.shiro" name="shiro-web" rev="&ApacheShiro.version;"/>
+		<dependency org="org.apache.shiro" name="shiro-core" rev="&ApacheShiro.version;" />
+		<dependency org="org.apache.shiro" name="shiro-web" rev="&ApacheShiro.version;" />
 		
 		<!-- slf4j -->
 		<dependency org="org.slf4j" name="slf4j-api" rev="&slf4j.version;"/>

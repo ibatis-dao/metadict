@@ -62,7 +62,8 @@ public class LoginView extends VerticalLayout implements View {
 	        /* Label label = new Label("test 123");
 	        layout.addComponent(label); */
 			//username.focus();
-	        username.setValue("StarukhSA"); //отладка
+	        username.setValue("user01"); //отладка
+	        password.setValue("pa$Sword01"); //отладка
 			password.focus();
 			frmLayout.addComponent(username);
 			frmLayout.addComponent(password);
