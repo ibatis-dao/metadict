@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="app.dict.country.CountryDAO$CountryMapper">
+
+    <resultMap type="Country" id="CountryMap">
+        <result column="id" property="id" jdbcType="VARCHAR" javaType="String"/>
+        <result column="name" property="name" jdbcType="VARCHAR" javaType="String"/>
+        <result column="number3code" property="number3code" jdbcType="VARCHAR" javaType="String"/>
+        <result column="alpha2code" property="alpha2code" jdbcType="VARCHAR" javaType="String"/>
+        <result column="alpha3code" property="alpha3code" jdbcType="VARCHAR" javaType="String"/>
+    </resultMap>
+
+    <select id="getAll" databaseId="postgresql" resultMap="CountryMap">
+    select * from i18_country order by id
+    </select>
+
+    <select id="findByN3c" databaseId="postgresql" parameterType="String" resultMap="CountryMap">
+    select * from i18_country_find_by_n3c(#{n3c})
+    </select>
+
+    <!-- ParameterMapping{property='item', mode=IN, javaType=class java.lang.Object, jdbcType=null, numericScale=null, resultMapId='null', jdbcTypeName='null', expression='null'} -->
+    
+    <update id="insert" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
+    {call i18_country_ins(#{item, mode=IN, jdbcTypeName=i18_country, javaType=Country}) }
+    </update>
+    
+    <update id="update" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
+    {call i18_country_upd(#{item}) }
+    </update>
+    
+    <delete id="delete" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
+    {call i18_country_del(#{item}) }
+    </delete>
+    
+</mapper>

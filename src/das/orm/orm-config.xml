@@ -6,7 +6,7 @@
   <properties resource="das/orm/orm-config.properties">
   	<property name="keepDBConnection" value="false"/>
   </properties>
-    <settings>
+  <settings>
     <!-- Valid values of logImpl are: SLF4J, LOG4J, LOG4J2, JDK_LOGGING, COMMONS_LOGGING, STDOUT_LOGGING, NO_LOGGING -->
   	<setting name="logImpl" value="SLF4J"/>
   	<setting name="logPrefix" value="shiro"/>
@@ -18,6 +18,7 @@
     <typeAlias alias="AppUser" type="shiro.dao.AppUser"/>
     <typeAlias alias="AppUserRole" type="shiro.dao.AppUserRole"/>
     <typeAlias alias="AppUserPermission" type="shiro.dao.AppUserPermission"/>
+    <typeAlias alias="Country" type="app.dict.country.Country"/>
     <!-- typeAlias alias="BLOB" type="oracle.sql.BLOB"/ -->
   </typeAliases>
   
@@ -46,8 +47,9 @@
     <property name="Oracle" value="oracle" />
   </databaseIdProvider>
   <mappers>
+    <mapper resource="app/dict/country/CountryMapper.xml"/>
     <mapper resource="das/dao/filter/FilterMapper.xml"/>
     <mapper resource="shiro/dao/AppSessionMapper.xml"/>
     <mapper resource="shiro/dao/AppUserMapper.xml"/>
-    </mappers>
+  </mappers>
 </configuration>

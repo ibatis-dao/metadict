@@ -530,6 +530,34 @@ COMMENT ON COLUMN i18_country.alpha3code IS 'ISO 3166 Alpha3 code';
 
 
 --
+-- Name: i18_country_del(i18_country); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION i18_country_del(p_data i18_country) RETURNS i18_country
+    LANGUAGE plpgsql COST 3
+    AS $$
+-- удаляет строку данных. возвращает удаленную строку
+declare
+  res i18_country;
+begin
+  delete from i18_country
+   where id = p_data.id
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.i18_country_del(p_data i18_country) OWNER TO postgres;
+
+--
+-- Name: FUNCTION i18_country_del(p_data i18_country); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION i18_country_del(p_data i18_country) IS 'удаляет строку данных. возвращает удаленную строку';
+
+
+--
 -- Name: i18_country_find_by_a23c(character); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -707,6 +735,67 @@ ALTER FUNCTION public.i18_country_find_by_name(p_name text) OWNER TO postgres;
 --
 
 COMMENT ON FUNCTION i18_country_find_by_name(p_name text) IS 'возвращает строку страны по её наименованию';
+
+
+--
+-- Name: i18_country_ins(i18_country); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION i18_country_ins(p_data i18_country) RETURNS i18_country
+    LANGUAGE plpgsql COST 3
+    AS $$
+-- вставляет строку данных. возвращает вставленную строку
+declare
+  res i18_country;
+begin
+  p_data.id = coalesce(p_data.id, nextval('i18_country_id_seq'));
+  insert into i18_country (id, name, number3code, alpha2code, alpha3code)
+  values (p_data.id, p_data.name, p_data.number3code, p_data.alpha2code, p_data.alpha3code)
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.i18_country_ins(p_data i18_country) OWNER TO postgres;
+
+--
+-- Name: FUNCTION i18_country_ins(p_data i18_country); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION i18_country_ins(p_data i18_country) IS 'вставляет строку данных. возвращает вставленную строку';
+
+
+--
+-- Name: i18_country_upd(i18_country); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION i18_country_upd(p_data i18_country) RETURNS i18_country
+    LANGUAGE plpgsql COST 3
+    AS $$
+declare
+  res i18_country;
+-- обновляет строку данных. возвращает обновленную строку
+begin
+  update i18_country
+     set name = p_data.name, 
+         number3code = p_data.number3code, 
+         alpha2code = p_data.alpha2code, 
+         alpha3code = p_data.alpha3code
+   where id = p_data.id
+  returning * into res;
+  return res;
+end;
+$$;
+
+
+ALTER FUNCTION public.i18_country_upd(p_data i18_country) OWNER TO postgres;
+
+--
+-- Name: FUNCTION i18_country_upd(p_data i18_country); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION i18_country_upd(p_data i18_country) IS 'обновляет строку данных. возвращает обновленную строку';
 
 
 --
