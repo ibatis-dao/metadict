@@ -23,6 +23,16 @@ public class Country implements Serializable {
 		this.alpha3code = alpha3code;
   	}
 
+	/* (non-Javadoc)
+	 * @see java.lang.Object#toString()
+	 */
+	@Override
+	public String toString() {
+		return "Country [id=" + id + ", name=" + name + ", number3code="
+				+ number3code + ", alpha2code=" + alpha2code + ", alpha3code="
+				+ alpha3code + "]";
+	}
+
 	/**
 	 * @return the id
 	 */

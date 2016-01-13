@@ -6,6 +6,7 @@ package app.dict;
 import static org.junit.Assert.*;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.junit.After;
@@ -28,9 +29,11 @@ public class CountryDAOtst {
 
 	/**
 	 * Test method for {@link app.dict.country.CountryDAO#CountryDAO()}.
+	 * @throws SQLException 
+	 * @throws IOException 
 	 */
 	//@Test
-	public void testCountryDAO() {
+	public void testCountryDAO() throws IOException, SQLException {
 		CountryDAO c = new CountryDAO();
 		assertNotNull(c);
 	}
@@ -38,9 +41,10 @@ public class CountryDAOtst {
 	/**
 	 * Test method for {@link das.base.CRUDSingleDAO#getAll()}.
 	 * @throws IOException 
+	 * @throws SQLException 
 	 */
 	//@Test
-	public void testGetAll() throws IOException {
+	public void testGetAll() throws IOException, SQLException {
 		CountryDAO c = new CountryDAO();
 		assertNotNull(c);
 		List<Country> l = c.getAll();
@@ -50,9 +54,10 @@ public class CountryDAOtst {
 	/**
 	 * Test method for {@link das.base.CRUDSingleDAO#insert(), #update(), #delete(), #findByN3c()}.
 	 * @throws IOException 
+	 * @throws SQLException 
 	 */
 	@Test
-	public void testCUD() throws IOException {
+	public void testCUD() throws IOException, SQLException {
 		CountryDAO c = new CountryDAO();
 		assertNotNull(c);
 		Country item = new Country(null, "name01", "1", "00", "000");

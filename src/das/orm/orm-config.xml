@@ -19,13 +19,14 @@
     <typeAlias alias="AppUserRole" type="shiro.dao.AppUserRole"/>
     <typeAlias alias="AppUserPermission" type="shiro.dao.AppUserPermission"/>
     <typeAlias alias="Country" type="app.dict.country.Country"/>
+    <typeAlias alias="StructTypeHandler" type="das.base.StructTypeHandler"/> 
     <!-- typeAlias alias="BLOB" type="oracle.sql.BLOB"/ -->
   </typeAliases>
-  
-  <!-- typeHandlers>
-    <package name="org.apache.ibatis.type"/>
-    <typeHandler javaType="byte[]" jdbcType="BLOB" handler="org.apache.ibatis.type.BlobTypeHandler"/> 
-  </typeHandlers  -->
+  <typeHandlers>
+    <!-- typeHandler javaType="byte[]" jdbcType="BLOB" handler="org.apache.ibatis.type.BlobTypeHandler"/ -->
+    <typeHandler handler="das.base.StructTypeHandler"/> 
+    <!-- package name="org.apache.ibatis.type"/ -->
+  </typeHandlers>
   <environments default="development-postgresql">
     <environment id="development-postgresql">
       <transactionManager type="JDBC" >

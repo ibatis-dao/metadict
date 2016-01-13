@@ -20,12 +20,16 @@
     select * from i18_country_find_by_n3c(#{n3c})
     </select>
 
-    <!-- ParameterMapping{property='item', mode=IN, javaType=class java.lang.Object, jdbcType=null, numericScale=null, resultMapId='null', jdbcTypeName='null', expression='null'} -->
+    <!-- ParameterMapping{property='item', mode=IN, javaType=class java.lang.Object, jdbcType=null, numericScale=null, resultMapId='null', jdbcTypeName='null', expression='null'}
+    typeHandler=StructTypeHandler, 
+    typeHandler=ObjectTypeHandler
+    #{item, mode=IN, jdbcType=OTHER, jdbcTypeName=i18_country, javaType=Country, typeHandler=StructTypeHandler}
+     -->
     
     <update id="insert" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
-    {call i18_country_ins(#{item, mode=IN, jdbcTypeName=i18_country, javaType=Country}) }
+    {call i18_country_ins(#{item, mode=IN, jdbcType=OTHER, javaType=CountrySQLData, jdbcTypeName=i18_country, typeHandler=StructTypeHandler}) }
     </update>
-    
+
     <update id="update" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
     {call i18_country_upd(#{item}) }
     </update>
