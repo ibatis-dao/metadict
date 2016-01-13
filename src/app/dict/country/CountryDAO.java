@@ -28,50 +28,6 @@ public class CountryDAO extends CRUDSingleDAO<Country, CountryDAO.CountryMapper>
 	}
 	
 	/**
-	 * поддержка преобразования составного (объектного) типа БД в класс java средствами драйвера jdbc 
-	 * @author serg
-	 *
-	 */
-	public class CountrySQLData implements SQLData {
-		
-		private String sqlTypeName;
-		private Country country;
-		
-		public CountrySQLData(Country country, String sqlTypeName) {
-			log.trace("CountrySQLData(country={}, sqlTypeName={})", country!=null?country:null, sqlTypeName);
-			this.country = country;
-			this.sqlTypeName = sqlTypeName;
-		}
-		
-		@Override
-		public String getSQLTypeName() throws SQLException {
-			log.trace("getSQLTypeName()={}", sqlTypeName);
-			return sqlTypeName;
-		}
-
-		@Override
-		public void readSQL(SQLInput stream, String sqlTypeName) throws SQLException {
-			log.trace("readSQL(sqlTypeName={})", sqlTypeName);
-			country.setId(stream.readString()); // идентификатор
-			country.setName(stream.readString());  // наименование
-			country.setNumber3code(stream.readString()); // ISO 3166 Number3 code
-			country.setAlpha2code(stream.readString()); // ISO 3166 Alpha2 code
-			country.setAlpha3code(stream.readString()); // ISO 3166 Alpha3 code
-		}
-
-		@Override
-		public void writeSQL(SQLOutput stream) throws SQLException {
-			log.trace("writeSQL()");
-			stream.writeString(country.getId());
-			stream.writeString(country.getName());
-			stream.writeString(country.getNumber3code());
-			stream.writeString(country.getAlpha2code());
-			stream.writeString(country.getAlpha3code());
-		}
-		
-	}
-
-	/**
 	 * поддержка методов объекта доступа к данным. реализация интерфейса CRUDSingleMapper
 	 * @throws IOException, SQLException 
 	 */
@@ -86,10 +42,29 @@ public class CountryDAO extends CRUDSingleDAO<Country, CountryDAO.CountryMapper>
 		if (map == null) {
 			map = new HashMap<String,Class<?>>();
 		}
-		//log.debug("map={}", map);
-		map.put("public.i18_country", CountrySQLData.class);
+		log.debug("map={}", map);
+		map.put("i18_country", Country.class);
 		conn.setTypeMap(map);
 
+	}
+	
+	@Override
+	public int insert(Country item) throws IOException {
+		Connection conn = new ORMFacade().getDBConnection();
+		Map<String, Class<?>> map;
+		try {
+			map = conn.getTypeMap();
+			if (map != null) {
+				Class<?> c = map.get("i18_country");
+				log.debug("map(i18_country)={}", c);
+			} else {
+				log.debug("map=null");
+			}
+		} catch (SQLException e) {
+			log.error("", e);
+		}
+		
+        return super.insert(item);
 	}
 	
 	public Country findByN3c(String number3code) throws IOException {

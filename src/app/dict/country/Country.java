@@ -1,10 +1,20 @@
 package app.dict.country;
 
 import java.io.Serializable;
+import java.sql.SQLData;
+import java.sql.SQLException;
+import java.sql.SQLInput;
+import java.sql.SQLOutput;
 
-public class Country implements Serializable {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import app.dict.CountryDAOtst;
+
+public class Country implements Serializable, SQLData  {
 
 	private static final long serialVersionUID = -2009341264796693438L;
+	private static final transient Logger log = LoggerFactory.getLogger(Country.class);
 
 	private String id; // идентификатор
 	private String name;  // наименование
@@ -103,4 +113,35 @@ public class Country implements Serializable {
 		this.alpha3code = alpha3code;
 	}
 
+	/************************************
+	 * interface SQLData implementation *
+	 ************************************/
+	private String sqlTypeName;
+
+	@Override
+	public String getSQLTypeName() throws SQLException {
+		log.trace("getSQLTypeName()={}", sqlTypeName);
+		return sqlTypeName;
+	}
+
+	@Override
+	public void readSQL(SQLInput stream, String sqlTypeName) throws SQLException {
+		log.trace("readSQL(sqlTypeName={})", sqlTypeName);
+		setId(stream.readString()); // идентификатор
+		setName(stream.readString());  // наименование
+		setNumber3code(stream.readString()); // ISO 3166 Number3 code
+		setAlpha2code(stream.readString()); // ISO 3166 Alpha2 code
+		setAlpha3code(stream.readString()); // ISO 3166 Alpha3 code
+	}
+
+	@Override
+	public void writeSQL(SQLOutput stream) throws SQLException {
+		log.trace("writeSQL()");
+		stream.writeString(getId());
+		stream.writeString(getName());
+		stream.writeString(getNumber3code());
+		stream.writeString(getAlpha2code());
+		stream.writeString(getAlpha3code());
+	}
+	
 }

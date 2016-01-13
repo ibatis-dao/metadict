@@ -27,7 +27,7 @@
      -->
     
     <update id="insert" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
-    {call i18_country_ins(#{item, mode=IN, jdbcType=OTHER, javaType=CountrySQLData, jdbcTypeName=i18_country, typeHandler=StructTypeHandler}) }
+    {call i18_country_ins(#{item, mode=IN, jdbcType=OTHER, javaType=Country, jdbcTypeName=i18_country, typeHandler=StructTypeHandler}) }
     </update>
 
     <update id="update" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
