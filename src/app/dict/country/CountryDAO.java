@@ -34,37 +34,8 @@ public class CountryDAO extends CRUDSingleDAO<Country, CountryDAO.CountryMapper>
 	public CountryDAO() throws IOException, IOException, SQLException {
         super(CountryDAO.CountryMapper.class);
 		log.trace(">>> constructor >>>");
-		ORMFacade orm;
-		orm = new ORMFacade();
-		Connection conn = orm.getDBConnection();
-		
-		Map<String,Class<?>> map = conn.getTypeMap();
-		if (map == null) {
-			map = new HashMap<String,Class<?>>();
-		}
-		log.debug("map={}", map);
-		map.put("i18_country", Country.class);
-		conn.setTypeMap(map);
-
-	}
-	
-	@Override
-	public int insert(Country item) throws IOException {
-		Connection conn = new ORMFacade().getDBConnection();
-		Map<String, Class<?>> map;
-		try {
-			map = conn.getTypeMap();
-			if (map != null) {
-				Class<?> c = map.get("i18_country");
-				log.debug("map(i18_country)={}", c);
-			} else {
-				log.debug("map=null");
-			}
-		} catch (SQLException e) {
-			log.error("", e);
-		}
-		
-        return super.insert(item);
+		ORMFacade orm = new ORMFacade();
+		orm.setSqlTypeForClass("public.i18_country", Country.class);
 	}
 	
 	public Country findByN3c(String number3code) throws IOException {

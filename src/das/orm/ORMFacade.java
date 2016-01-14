@@ -171,4 +171,15 @@ public class ORMFacade {
         }
     }
     
+    public void setSqlTypeForClass(String sqlTypeName, Class<?> javaClass) {
+    	ormConn.setSqlTypeForClass(sqlTypeName, javaClass);
+    }
+    
+    public String getSqlTypeForClass(Class<?> javaClass) {
+    	return ormConn.getSqlTypeForClass(javaClass);
+    }
+    
+    public Class<?> getClassForSqlType(String sqlTypeName) {
+    	return ormConn.getClassForSqlType(sqlTypeName);
+    }
 }

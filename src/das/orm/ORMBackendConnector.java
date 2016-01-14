@@ -26,12 +26,16 @@ import das.dao.props.BeanPropertyMapping;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.Map.Entry;
 
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.apache.ibatis.io.Resources;
@@ -48,6 +52,8 @@ import org.slf4j.LoggerFactory;
 public class ORMBackendConnector {
 	
     protected static Logger log = LoggerFactory.getLogger(ORMBackendConnector.class);
+    protected static Map<String, Class<?>> sqlTypeClassMap;
+    protected static Map<Class<?>, String> classSqlTypeMap;
     private SqlSessionFactory sqlSessionFactory;
     private Connection connection;
     private final boolean keepDBConnection;
@@ -202,6 +208,43 @@ public class ORMBackendConnector {
             }
         }
         return DAOprops;
+    }
+
+    public void setSqlTypeForClass(String sqlTypeName, Class<?> javaClass) {
+		if (sqlTypeClassMap == null) {
+			synchronized(this) {
+				sqlTypeClassMap = new HashMap<String, Class<?>>();
+	    	}
+			log.debug("sqlTypeClassMap == null");
+		} else {
+			log.debug("sqlTypeClassMap != null");
+		}
+		if (classSqlTypeMap == null) {
+			synchronized(this) {
+				classSqlTypeMap = new HashMap<Class<?>, String>();
+	    	}
+			log.debug("classSqlTypeMap == null");
+		} else {
+			log.debug("classSqlTypeMap != null");
+		}
+		sqlTypeClassMap.put(sqlTypeName, javaClass);
+		classSqlTypeMap.put(javaClass, sqlTypeName);
+	}
+	
+    public String getSqlTypeForClass(Class<?> javaClass) {
+    	String res = null;
+    	if (classSqlTypeMap != null) {
+    		res = classSqlTypeMap.get(javaClass);
+    	}
+		return res;
+    }
+
+    public Class<?> getClassForSqlType(String sqlTypeName) {
+    	Class<?> res = null;
+    	if (sqlTypeClassMap != null) {
+    		res = sqlTypeClassMap.get(sqlTypeName);
+    	}
+		return res;
     }
 
 }
