@@ -209,7 +209,11 @@ public class ORMBackendConnector {
         }
         return DAOprops;
     }
-
+    /**
+     * отображение комплексных типов данных в БД на типы java
+     * @param sqlTypeName наименование комплексного типа данных в БД
+     * @param javaClass класс java
+     */
     public void setSqlTypeForClass(String sqlTypeName, Class<?> javaClass) {
 		if (sqlTypeClassMap == null) {
 			synchronized(this) {
@@ -246,5 +250,26 @@ public class ORMBackendConnector {
     	}
 		return res;
     }
-
+    
+    /**
+     * отображение параметров
+     */
+    public void getParameterMapNames() {
+    	log.debug(">> getParameterMapNames()");
+    	Configuration conf = getConfiguration();
+    	if (conf != null) {
+    		log.debug("conf != null");
+    		Collection<String> pmn = conf.getParameterMapNames();
+    		if (pmn != null) {
+    			log.debug("pmn != null. pmn.size={}", pmn.size());
+    			for (String n : pmn) {
+    				log.debug("ParameterMapName={}", n);
+    			}
+    		} else {
+        		log.debug("pmn = null");
+        	}
+    	} else {
+    		log.debug("conf = null");
+    	}
+    }
 }

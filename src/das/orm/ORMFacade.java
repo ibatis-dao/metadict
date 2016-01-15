@@ -182,4 +182,9 @@ public class ORMFacade {
     public Class<?> getClassForSqlType(String sqlTypeName) {
     	return ormConn.getClassForSqlType(sqlTypeName);
     }
+    
+    public void getParameterMapNames() {
+    	ormConn.getParameterMapNames();
+    }
+
 }

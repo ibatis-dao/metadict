@@ -1,5 +1,7 @@
 package das.base;
 
+import java.io.IOException;
+import java.lang.reflect.Type;
 import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -12,10 +14,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.apache.ibatis.exceptions.PersistenceException;
 import org.apache.ibatis.type.BaseTypeHandler;
 import org.apache.ibatis.type.JdbcType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import app.dict.country.Country;
+import das.orm.ORMFacade;
 
 public class StructTypeHandler<B> extends BaseTypeHandler<B> {
 
@@ -55,10 +61,26 @@ public class StructTypeHandler<B> extends BaseTypeHandler<B> {
 	public void setNonNullParameter(PreparedStatement ps, int parameterIndex, B parameter, JdbcType jdbcType) throws SQLException {
 		log.debug("setNonNullParameter(paramIdx={}, parameter.class={}, jdbcType={})", parameterIndex, parameter==null?null:parameter.getClass().getName(), jdbcType);
 		//setNonNullParameter(paramIdx=1, parameter.class=app.dict.country.Country, jdbcType=STRUCT)
-		Connection conn = ps.getConnection();
+		log.debug("configuration={}", configuration==null?"null":"non-null");
+		Type type = getRawType();
+		log.debug("type={}", type);
+		
+		ORMFacade orm;
+		try {
+			orm = new ORMFacade();
+			String sqlTypeName = orm.getSqlTypeForClass(Country.class);
+			log.debug("sqlTypeName={}", sqlTypeName);
+			orm.getParameterMapNames();
+		} catch (PersistenceException e) {
+			log.error("", e);
+		} catch (IOException e) {
+			log.error("", e);
+		}
+		
+		/*Connection conn = ps.getConnection();
 		log.debug("configuration={}", configuration); 
 		String jdbcTypeName = getJDBCTypeName(conn, parameter);
-		log.debug("jdbcTypeName={}", jdbcTypeName);
+		log.debug("jdbcTypeName={}", jdbcTypeName);*/
 		//conn.createStruct(jdbcTypeName, attributes)
 		// Create descriptors for each Oracle record type required
 		//Struct structDesc = StructDescriptor.createDescriptor("LISA.T_USR_CONTRAGENT_BLACKLIST_ROW", conn);
