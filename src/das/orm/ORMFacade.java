@@ -37,42 +37,69 @@ public class ORMFacade {
 
     protected static final Logger log = LoggerFactory.getLogger(ORMFacade.class);
     private static ORMBackendConnector ormConn = null;
-    private SqlSession sqlSess; 
+    private SqlSession sqlSess;
+    private Connection conn;
 
     public ORMFacade() throws IOException, PersistenceException {
-        log.trace(">>> constructor");
-        createDaoFactory();
+        log.trace(">>> constructor()");
+        createDaoFactory(null, null);
     }
-
-    private void createDaoFactory() throws IOException, PersistenceException {
+    
+    public ORMFacade(String configURI) throws IOException, PersistenceException {
+        log.trace(">>> constructor(configURI)");
+        createDaoFactory(configURI, null);
+    }
+    
+    public ORMFacade(Connection conn) throws IOException, PersistenceException {
+        log.trace(">>> constructor(Connection)");
+        createDaoFactory(null, conn);
+    }
+    
+    public ORMFacade(String configURI, Connection conn) throws IOException, PersistenceException {
+        log.trace(">>> constructor(configURI, Connection)");
+        createDaoFactory(configURI, conn);
+    }
+    
+    private void createDaoFactory(String configURI, Connection conn) throws IOException, PersistenceException {
         log.trace(">>> createDaoFactory");
         synchronized(this) {
             if (ormConn == null) {
                 try {
-                    ormConn = new ORMBackendConnector(null);
+                    ormConn = new ORMBackendConnector(configURI, conn);
                 } catch (IOException e ) {
-                    log.error("createDaoFactory() failed", e);
+                    log.error("createDaoFactory(configURI, conn) failed", e);
                     throw e;
                 }
 	            catch (PersistenceException e ) {
-	                log.error("createDaoFactory() failed", e);
+	                log.error("createDaoFactory(configURI, conn) failed", e);
 	                throw e;
 	            }
+            } else {
+            	this.conn = conn;
             }
         }
     }
 
     public SqlSession createDBSession(){
+    	return createDBSession(null);
+    }
+    
+    public SqlSession createDBSession(Connection conn){
         log.trace(">>> createDBSession");
         if (ormConn == null) { sqlSess = null; }
-        else { sqlSess = ormConn.createDBSession(); }
+        else { sqlSess = ormConn.createDBSession(conn, false); }
         return sqlSess;
     }
 
     public SqlSession getDBSession(){
+    	return getDBSession(null);
+    }
+    
+    public SqlSession getDBSession(Connection conn){
         log.trace(">>> getDBSession");
         if (sqlSess == null) {
-            return createDBSession();
+            this.conn = conn;
+        	return createDBSession(conn);
         }
         else {
             return sqlSess;
@@ -91,19 +118,31 @@ public class ORMFacade {
     }
 
     public Connection getDBConnection(){
+    	if (conn != null) {
+    		return conn;
+    	} else {
+    		return getDBConnection(null);
+    	}
+    }
+    
+    public Connection getDBConnection(Connection conn){
         log.trace(">>> getDBConnection");
-        return getDBSession().getConnection();
+        if (conn != null) {
+    		return conn;
+    	} else {
+    		return getDBSession(conn).getConnection();
+    	}
     }
 
     public Configuration getConfiguration() throws IOException {
         log.trace(">>> getConfiguration");
-        if (ormConn == null) { createDaoFactory(); }
+        if (ormConn == null) { createDaoFactory(null, null); }
         return ormConn.getConfiguration();
     }
     
     public List<BeanPropertyMapping> getBeanPropertiesMapping(Class<?> beanClass) throws IOException {
         log.trace(">>> getBeanPropertiesMapping");
-        if (ormConn == null) { createDaoFactory(); }
+        if (ormConn == null) { createDaoFactory(null, null); }
         return ormConn.getBeanPropertiesMapping(beanClass);
     }
 

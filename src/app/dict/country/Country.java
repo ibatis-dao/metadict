@@ -11,21 +11,21 @@ import org.slf4j.LoggerFactory;
 
 import app.dict.CountryDAOtst;
 
-public class Country implements Serializable, SQLData  {
+public class Country implements Serializable /*, SQLData*/  {
 
 	private static final long serialVersionUID = -2009341264796693438L;
 	private static final transient Logger log = LoggerFactory.getLogger(Country.class);
 
-	private String id; // идентификатор
+	private Integer id; // идентификатор
 	private String name;  // наименование
-	private String number3code; // ISO 3166 Number3 code
+	private Integer number3code; // ISO 3166 Number3 code
 	private String alpha2code; // ISO 3166 Alpha2 code
 	private String alpha3code; // ISO 3166 Alpha3 code
 
 	public Country() {
   	}
 
-	public Country(String id, String name, String number3code, String alpha2code, String alpha3code) {
+	public Country(Integer id, String name, Integer number3code, String alpha2code, String alpha3code) {
 		this.id = id;
 		this.name = name;
 		this.number3code = number3code;
@@ -46,14 +46,14 @@ public class Country implements Serializable, SQLData  {
 	/**
 	 * @return the id
 	 */
-	public String getId() {
+	public Integer getId() {
 		return id;
 	}
 
 	/**
 	 * @param id the id to set
 	 */
-	public void setId(String id) {
+	public void setId(Integer id) {
 		this.id = id;
 	}
 
@@ -74,14 +74,14 @@ public class Country implements Serializable, SQLData  {
 	/**
 	 * @return the number3code
 	 */
-	public String getNumber3code() {
+	public Integer getNumber3code() {
 		return number3code;
 	}
 
 	/**
 	 * @param number3code the number3code to set
 	 */
-	public void setNumber3code(String number3code) {
+	public void setNumber3code(Integer number3code) {
 		this.number3code = number3code;
 	}
 
@@ -116,6 +116,7 @@ public class Country implements Serializable, SQLData  {
 	/************************************
 	 * interface SQLData implementation *
 	 ************************************/
+	/*
 	private String sqlTypeName;
 
 	@Override
@@ -143,5 +144,5 @@ public class Country implements Serializable, SQLData  {
 		stream.writeString(getAlpha2code());
 		stream.writeString(getAlpha3code());
 	}
-	
+	*/
 }

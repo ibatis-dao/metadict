@@ -35,7 +35,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
             log.trace("<<< login");
             return sessId;
         } catch (Exception e) {
-            log.error(null, e);
+            log.error("", e);
             orm.rollback();
             throw e;
         } finally {
@@ -57,7 +57,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
             log.trace("<<< getSessionByID");
             return sess;
         } catch (Exception e) {
-            log.error(null, e);
+            log.error("", e);
             orm.rollback();
             throw e;
         } finally {
@@ -75,7 +75,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
             orm.commit();
             log.trace("<<< logout");
         } catch (Exception e) {
-            log.error(null, e);
+            log.error("", e);
             orm.rollback();
             throw e;
         } finally {
@@ -93,7 +93,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
             log.trace("<<< getRoles");
             return res;
         } catch (IOException e) {
-            log.error(null, e);
+            log.error("", e);
             throw e;
         } finally {
             orm.closeDBSession();
@@ -110,7 +110,7 @@ public class AppSessionDAO implements Serializable, AppSessionMapper {
             log.trace("<<< getPermissions");
             return res;
         } catch (IOException e) {
-            log.error(null, e);
+            log.error("", e);
             throw e;
         } finally {
             orm.closeDBSession();

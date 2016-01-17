@@ -5,9 +5,9 @@
 <mapper namespace="app.dict.country.CountryDAO$CountryMapper">
 
     <resultMap type="Country" id="CountryMap">
-        <result column="id" property="id" jdbcType="VARCHAR" javaType="String"/>
+        <result column="id" property="id" jdbcType="INTEGER" javaType="Integer"/>
         <result column="name" property="name" jdbcType="VARCHAR" javaType="String"/>
-        <result column="number3code" property="number3code" jdbcType="VARCHAR" javaType="String"/>
+        <result column="number3code" property="number3code" jdbcType="INTEGER" javaType="Integer"/>
         <result column="alpha2code" property="alpha2code" jdbcType="VARCHAR" javaType="String"/>
         <result column="alpha3code" property="alpha3code" jdbcType="VARCHAR" javaType="String"/>
     </resultMap>
@@ -16,7 +16,7 @@
     select * from i18_country order by id
     </select>
 
-    <select id="findByN3c" databaseId="postgresql" parameterType="String" resultMap="CountryMap">
+    <select id="findByN3c" databaseId="postgresql" parameterType="INTEGER" resultMap="CountryMap">
     select * from i18_country_find_by_n3c(#{n3c})
     </select>
 
@@ -24,18 +24,25 @@
     typeHandler=StructTypeHandler, 
     typeHandler=ObjectTypeHandler
     #{item, mode=IN, jdbcType=OTHER, jdbcTypeName=i18_country, javaType=Country, typeHandler=StructTypeHandler}
+    
+    useGeneratedKeys="true" keyColumn="id"
+    {call i18_country_ins( (#{id, jdbcType=INTEGER}, #{name, jdbcType=VARCHAR}, #{number3code, jdbcType=INTEGER}, #{alpha2code, jdbcType=VARCHAR}, #{alpha3code, jdbcType=VARCHAR}) ) }
+    select * from i18_country_ins( (#{id, jdbcType=INTEGER}, #{name, jdbcType=VARCHAR}, #{number3code, jdbcType=INTEGER}, #{alpha2code, jdbcType=VARCHAR}, #{alpha3code, jdbcType=VARCHAR}) )
      -->
     
-    <update id="insert" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
-    {call i18_country_ins(#{item, jdbcType=STRUCT, jdbcTypeName=public.i18_country, javaType=Country, typeHandler=StructTypeHandler}) }
-    </update>
+    <insert id="insert" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
+    	<selectKey keyProperty="id" resultType="int" order="BEFORE">
+		select nextval('i18_country_id_seq')
+		</selectKey>
+        {call i18_country_ins( (#{id, jdbcType=INTEGER}, #{name, jdbcType=VARCHAR}, #{number3code, jdbcType=INTEGER}, #{alpha2code, jdbcType=VARCHAR}, #{alpha3code, jdbcType=VARCHAR}) ) }
+    </insert>
 
     <update id="update" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
-    {call i18_country_upd(#{item}) }
+    {call i18_country_upd( (#{id, jdbcType=INTEGER}, #{name, jdbcType=VARCHAR}, #{number3code, jdbcType=INTEGER}, #{alpha2code, jdbcType=VARCHAR}, #{alpha3code, jdbcType=VARCHAR}) ) }
     </update>
     
     <delete id="delete" databaseId="postgresql" statementType="CALLABLE" parameterType="Country">
-    {call i18_country_del(#{item}) }
+    {call i18_country_del( (#{id, jdbcType=INTEGER}, #{name, jdbcType=VARCHAR}, #{number3code, jdbcType=INTEGER}, #{alpha2code, jdbcType=VARCHAR}, #{alpha3code, jdbcType=VARCHAR}) ) }
     </delete>
     
 </mapper>

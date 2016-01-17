@@ -22,7 +22,7 @@ public interface CRUDSingleMapper<B> {
 	 **/
 
 	List<B> getAll() throws IOException;
-	int insert(@Param("item") B item) throws IOException;
-	int update(@Param("item") B item) throws IOException;
-	int delete(@Param("item") B item) throws IOException;
+	int insert(B item) throws IOException;
+	int update(B item) throws IOException;
+	int delete(B item) throws IOException;
 }

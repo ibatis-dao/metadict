@@ -44,7 +44,7 @@ public class AppUserDAO implements AppUserMapper {
             log.trace("<<< getByName");
             return res;
         } catch (Exception e) {
-            log.error(null, e);
+            log.error("", e);
             throw e;
         } finally {
             orm.closeDBSession();

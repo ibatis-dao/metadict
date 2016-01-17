@@ -26,7 +26,6 @@ import das.dao.props.BeanPropertyMapping;
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -35,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.Map.Entry;
 
 import org.apache.ibatis.exceptions.PersistenceException;
 import org.apache.ibatis.io.Resources;
@@ -59,6 +57,10 @@ public class ORMBackendConnector {
     private final boolean keepDBConnection;
 
     public ORMBackendConnector (String configURI) throws IOException, PersistenceException {
+    	this(configURI, null);
+    }
+    
+    public ORMBackendConnector (String configURI, Connection conn) throws IOException, PersistenceException {
         log.trace(">>> constructor");
         if ((configURI == null) || configURI.length() == 0) {
             //String fs = System.getProperty("file.separator"); //не работает для чтения из ресурсов
@@ -70,16 +72,21 @@ public class ORMBackendConnector {
         log.debug("config ready");
         this.sqlSessionFactory = new SqlSessionFactoryBuilder().build(config);
         log.debug("SqlSessionFactoryBuilder created");
-        Configuration conf = getConfiguration();
-        Properties props = conf.getVariables();
-        // далеко не все типы источников данных поддерживают "длинные" соединения.
-        // большинство из них разрывают соединение сразу после закрытия SqlSession 
-        // или предоставляют пул соединений, в котором нельзя гарантировать, что 
-        // при следующем обращениии к БД будет использовано то-же самое соединение, 
-        // что и при предыдущем обращении к БД. 
-        // Поэтому по умолчанию предполагаем, что повторно использовать соединение нельзя
-        String prop = props.getProperty("keepDBConnection", "false");
-        this.keepDBConnection = Boolean.parseBoolean(prop);
+        connection = conn;
+        if (conn != null) {
+        	this.keepDBConnection = true;
+        } else {
+            Configuration conf = getConfiguration();
+	        Properties props = conf.getVariables();
+	        // далеко не все типы источников данных поддерживают "длинные" соединения.
+	        // большинство из них разрывают соединение сразу после закрытия SqlSession 
+	        // или предоставляют пул соединений, в котором нельзя гарантировать, что 
+	        // при следующем обращениии к БД будет использовано то-же самое соединение, 
+	        // что и при предыдущем обращении к БД. 
+	        // Поэтому по умолчанию предполагаем, что повторно использовать соединение нельзя
+	        String prop = props.getProperty("keepDBConnection", "false");
+	        this.keepDBConnection = Boolean.parseBoolean(prop);
+        }
         log.debug("keepDBConnection="+keepDBConnection);
     }	
 
@@ -100,14 +107,23 @@ public class ORMBackendConnector {
     }
 
     public SqlSession createDBSession(){
+    	return createDBSession(null, false);
+    }
+    
+    public SqlSession createDBSession(Connection conn, boolean keepThisConnection){
         log.trace(">>> createDBSession");
         if (sqlSessionFactory != null) { 
         	SqlSession ses;
-        	if (keepDBConnection && (connection != null)) {
-        		ses = sqlSessionFactory.openSession(connection);
+        	if (conn != null) {
+        		if (keepThisConnection) { connection = conn; }
+        		ses = sqlSessionFactory.openSession(conn);
         	} else {
-        		ses = sqlSessionFactory.openSession();
-            	connection = ses.getConnection();
+	        	if ((keepDBConnection || keepThisConnection) && (connection != null)) {
+	        		ses = sqlSessionFactory.openSession(connection);
+	        	} else {
+	        		ses = sqlSessionFactory.openSession();
+	            	connection = ses.getConnection();
+	        	}
         	}
             return ses;
         }

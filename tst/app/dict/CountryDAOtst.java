@@ -60,18 +60,27 @@ public class CountryDAOtst {
 	public void testCUD() throws IOException, SQLException {
 		CountryDAO c = new CountryDAO();
 		assertNotNull(c);
-		Country item = new Country(null, "name01", "1", "00", "000");
+		Country item;
+		//попытка найти ранее добавленную строку
+		try {
+			item = c.findByN3c(1);
+			log.debug("item.ID="+item.getId());
+			//если найдена, удаляем её
+			c.delete(item);
+		} catch (Exception e) {
+            log.error("", e);
+        }
+		item = new Country(null, "name01", 1, "00", "000");
 		assertNotNull(item);
-		int cnt = c.insert(item);
-		assertTrue(cnt > 0);
-		item = c.findByN3c("1");
+		c.insert(item);
+		log.debug("item.ID={}, name={}, number3code={}, alpha2code={}, alpha3code={}", item.getId(), item.getName(), item.getNumber3code(), item.getAlpha2code(), item.getAlpha3code());
+		assertNotNull(item.getId());
+		item = c.findByN3c(1);
 		assertNotNull(item);
 		log.debug("item.ID="+item.getId());
-		assertTrue("1".equals(item.getNumber3code()));
-		cnt = c.update(item);
-		assertTrue(cnt > 0);
-		cnt = c.delete(item);
-		assertTrue(cnt > 0);
+		assertEquals(1L, item.getNumber3code().longValue());
+		c.update(item);
+		c.delete(item);
 	}
 
 	/**

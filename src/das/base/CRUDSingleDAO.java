@@ -28,7 +28,7 @@ public class CRUDSingleDAO<B,M extends CRUDSingleMapper<B>> implements CRUDSingl
             log.trace("<<< getAll");
             return res;
         } catch (IOException e) {
-            log.error(null, e);
+            log.error("", e);
             throw e;
         } finally {
             orm.closeDBSession();
@@ -46,7 +46,7 @@ public class CRUDSingleDAO<B,M extends CRUDSingleMapper<B>> implements CRUDSingl
             orm.commit();
             log.trace("<<< insert");
         } catch (IOException e) {
-            log.error(null, e);
+            log.error("", e);
             orm.rollback();
             throw e;
         } finally {
@@ -66,7 +66,7 @@ public class CRUDSingleDAO<B,M extends CRUDSingleMapper<B>> implements CRUDSingl
             orm.commit();
             log.trace("<<< update");
         } catch (IOException e) {
-            log.error(null, e);
+            log.error("", e);
             orm.rollback();
             throw e;
         } finally {
@@ -86,7 +86,7 @@ public class CRUDSingleDAO<B,M extends CRUDSingleMapper<B>> implements CRUDSingl
             orm.commit();
             log.trace("<<< delete");
         } catch (IOException e) {
-            log.error(null, e);
+            log.error("", e);
             orm.rollback();
             throw e;
         } finally {

@@ -222,7 +222,7 @@ public class LimitedIntRange {
             n.init(first, length, leftLimit, rightLimit);
             return n;
         } catch (CloneNotSupportedException ex) {
-            log.error(null, ex);
+            log.error("", ex);
             return new LimitedIntRange(first, length, leftLimit, rightLimit);
         }
         */

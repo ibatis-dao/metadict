@@ -221,7 +221,7 @@ public class NestedIntRange implements INestedRange<Integer> {
             n.init(first, length, leftLimit, rightLimit);
             return n;
         } catch (CloneNotSupportedException ex) {
-            log.error(null, ex);
+            log.error("", ex);
             return new NestedIntRange(first, length, leftLimit, rightLimit);
         }
         */
